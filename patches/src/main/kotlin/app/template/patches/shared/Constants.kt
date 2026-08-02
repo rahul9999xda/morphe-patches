@@ -223,9 +223,9 @@ val CALM_COMPATIBILITY = Compatibility(
 val CALORY_COMPATIBILITY = Compatibility(
         name = "Calory",
         packageName = "com.funnmedia.calory",
-        apkFileType = ApkFileType.APKS,
+        apkFileType = ApkFileType.XAPK,
         appIconColor = 0xFF6B35,
-        targets = listOf(AppTarget(version = "3.6.2", versionCode = 201))
+        targets = listOf(AppTarget(version = "3.7.1", versionCode = 207))
     )
 
 val CAMSCANNER_COMPATIBILITY = Compatibility(
@@ -233,7 +233,7 @@ val CAMSCANNER_COMPATIBILITY = Compatibility(
         packageName = "com.intsig.camscanner",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x19BCAA,
-        targets = listOf(AppTarget(version = "7.21.5.2607090000", versionCode = 72151))
+        targets = listOf(AppTarget(version = "7.22.0.2607210000", versionCode = 72202))
     )
 
 val CANVA_COMPATIBILITY = Compatibility(
@@ -335,7 +335,7 @@ val CRIMERADAR_COMPATIBILITY = Compatibility(
         packageName = "com.newsbreak.crimeradar",
         appIconColor = 0xE53935,
         apkFileType = ApkFileType.XAPK,
-        targets = listOf(AppTarget(version = "26.30.0", versionCode = 26300005))
+        targets = listOf(AppTarget(version = "26.30.2", versionCode = 26300201))
     )
 
 val DAILYHUNT_COMPATIBILITY = Compatibility(
