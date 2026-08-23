@@ -1033,7 +1033,7 @@ val MOVIEBOX_TV_COMPATIBILITY = Compatibility(
         apkFileType = ApkFileType.APK,
         appIconColor = 0xE53935,
         targets = listOf(
-            AppTarget(version = "1.1.8.0814.03", versionCode = 50040013)
+            AppTarget(version = "1.1.9.0820.03", versionCode = 50040014)
         )
     )
 
