@@ -377,9 +377,9 @@ val CALORY_COMPATIBILITY = Compatibility(
 val CAMSCANNER_COMPATIBILITY = Compatibility(
         name = "CamScanner",
         packageName = "com.intsig.camscanner",
-        apkFileType = ApkFileType.APKS,
+        apkFileType = ApkFileType.XAPK,
         appIconColor = 0x19BCAA,
-        targets = listOf(AppTarget(version = "7.22.5.2607250000", versionCode = 72252))
+        targets = listOf(AppTarget(version = "7.24.0.2608120000", versionCode = 72401))
     )
 
 val CANVA_COMPATIBILITY = Compatibility(
@@ -424,9 +424,9 @@ val CASHEW_COMPATIBILITY = Compatibility(
 val CAST_TO_TV_COMPATIBILITY = Compatibility(
         name = "Cast to TV",
         packageName = "cast.video.screenmirroring.casttotv",
-        apkFileType = ApkFileType.APKM,
+        apkFileType = ApkFileType.XAPK,
         appIconColor = 0xE53935,
-        targets = listOf(AppTarget(version = "2.5.3.1", versionCode = 253102))
+        targets = listOf(AppTarget(version = "2.5.4", versionCode = 254001))
     )
 
 val CHARGEMETER_COMPATIBILITY = Compatibility(
@@ -490,7 +490,7 @@ val CRIMERADAR_COMPATIBILITY = Compatibility(
         packageName = "com.newsbreak.crimeradar",
         appIconColor = 0xE53935,
         apkFileType = ApkFileType.XAPK,
-        targets = listOf(AppTarget(version = "26.33.1", versionCode = 26330103))
+        targets = listOf(AppTarget(version = "26.34.0", versionCode = 26340001))
     )
 
 val CUBESOLVER_COMPATIBILITY = Compatibility(
@@ -681,7 +681,7 @@ val GOOGLE_PHOTOS_COMPATIBILITY = Compatibility(
         packageName = "com.google.android.apps.photos",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x4285F4,
-        targets = listOf(AppTarget(version = "7.90.0.970693120", versionCode = 52288652))
+        targets = listOf(AppTarget(version = "7.90.0.970916209", versionCode = 52288734))
     )
 
 val GREENIFY_COMPATIBILITY = Compatibility(
@@ -743,7 +743,7 @@ val INMIGREAT_COMPATIBILITY = Compatibility(
         packageName = "com.changayaf.inmigreat",
         appIconColor = 0x6344CC,
         apkFileType = ApkFileType.XAPK,
-        targets = listOf(AppTarget(version = "2.3.50", versionCode = 739))
+        targets = listOf(AppTarget(version = "2.3.53", versionCode = 745))
     )
 
 val INSCODE_AUTOCLICKER_COMPATIBILITY = Compatibility(
@@ -947,10 +947,10 @@ val MESSENGER_COMPATIBILITY = Compatibility(
         appIconColor = 0x0084FF,
         targets = listOf(
             AppTarget(
-                version = "575.0.0.48.90",
+                version = "576.0.0.47.92",
                 versionCodes = mapOf(
                     SupportedAbi.ARMEABI_V7A to 345012838,
-                    SupportedAbi.ARM64_V8A to 345012840)
+                    SupportedAbi.ARM64_V8A to 345012840, versionCode = 345212666)
             ),
         )
     )
@@ -1353,7 +1353,7 @@ val POCKETPREP_MAIN_COMPATIBILITY = Compatibility(
         packageName = "com.pocketprep.android.pocketprep",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x1D5CFF,
-        targets = listOf(AppTarget(version = "3.29.0", versionCode = 433))
+        targets = listOf(AppTarget(version = "3.29.1", versionCode = 434))
     )
 
 val POCKETPREP_MEDICAL_COMPATIBILITY = Compatibility(
@@ -1361,7 +1361,7 @@ val POCKETPREP_MEDICAL_COMPATIBILITY = Compatibility(
         packageName = "com.pocketprep.android.medical",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x1D5CFF,
-        targets = listOf(AppTarget(version = "3.29.0", versionCode = 433))
+        targets = listOf(AppTarget(version = "3.29.1", versionCode = 434))
     )
 
 val POCKETPREP_NURSING_COMPATIBILITY = Compatibility(
@@ -1393,7 +1393,7 @@ val POCKETPREP_SKILLED_TRADES_COMPATIBILITY = Compatibility(
         packageName = "com.pocketprep.android.automotive",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x1D5CFF,
-        targets = listOf(AppTarget(version = "3.29.0", versionCode = 433))
+        targets = listOf(AppTarget(version = "3.29.1", versionCode = 434))
     )
 
 val PODSLINK_COMPATIBILITY = Compatibility(
