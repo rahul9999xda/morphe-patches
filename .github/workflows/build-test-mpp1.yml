@@ -1,0 +1,53 @@
+name: Build Test MPP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-mpp:
+    name: Build MPP for Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+        with:
+          ref: test
+          fetch-depth: 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Build MPP
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :patches:buildAndroid --no-daemon --stacktrace
+
+      - name: Verify MPP was generated
+        run: |
+          echo "Generated MPP files:"
+          find patches/build/libs -maxdepth 1 -type f -name "*.mpp" -print
+
+          if ! find patches/build/libs -maxdepth 1 -type f -name "*.mpp" | grep -q .; then
+            echo "ERROR: No MPP file was generated."
+            exit 1
+          fi
+
+      - name: Upload MPP Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-test-mpp
+          path: patches/build/libs/*.mpp
+          if-no-files-found: error
+          retention-days: 7
