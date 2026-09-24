@@ -11,25 +11,39 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
 /**
- * Telegram 12.10.x can copy Rich HTML containing collapsible 
-<details>
- * sections. Native HTML paste must remain enabled because it is also the
- * path that restores embedded URL spans correctly.
+ * Keeps Telegram's native Rich HTML paste path enabled.
  *
- * The native paste parser turns collapsible rich blocks into Telegram
- * blockquote entities. When that entity is generated with collapsed=true,
- * the resulting pasted text can fail when sent to a normal chat. We keep the
- * blockquote entity, but force its `collapsed` flag to false. This preserves
- * the text, formatting and embedded links while removing only the
- * collapsible state that is problematic for pasted content.
+ * Telegram 12.10.4 preserves embedded URL spans only when the native
+ * getHtmlText() -> Html.fromHtml() paste path is allowed to run. The old
+ * "Use normal paste" patch bypassed that path and therefore lost embedded
+ * links.
+ *
+ * The remaining Rich HTML problem is the collapsed flag carried by a
+ * MessageEntityBlockquote generated from Telegram's 
+<blockquote>/
+    <details>
+ * HTML. MessageObject.addEntitiesToText() reads MessageEntity.collapsed while
+ * normalising the pasted text. Force that read to false so pasted rich
+ * blocks remain ordinary blockquotes instead of carrying the collapsed state.
+ *
+ * This changes only the boolean value read from MessageEntity.collapsed; all
+ * normal URL/TextUrl and formatting handling remains Telegram's original code.
  */
-private val richHtmlEntityBuilderFingerprint = Fingerprint(
-    name = "getEntities",
-    returnType = "Ljava/util/ArrayList;",
-    parameters = listOf("[Ljava/lang/CharSequence;", "Z", "Z"),
+private val richHtmlBlockquoteFingerprint = Fingerprint(
+    name = "addEntitiesToText",
+    returnType = "Z",
+    parameters = listOf(
+        "Ljava/lang/CharSequence;",
+        "Ljava/util/ArrayList;",
+        "Z",
+        "Z",
+        "Z",
+        "Z",
+        "I",
+    ),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC$TL_messageEntityBlockquote;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC\$MessageEntity;",
             name = "collapsed",
             type = "Z",
         ),
@@ -39,7 +53,7 @@ private val richHtmlEntityBuilderFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramFixRichHtmlPastePatch = bytecodePatch(
     name = "Fix Rich HTML paste sending",
-    description = "Keeps Telegram's native Rich HTML paste and embedded links, but removes the collapsed state from pasted blockquotes so copied Rich HTML can be sent normally.",
+    description = "Keeps native Rich HTML paste and embedded links, while disabling the collapsed state read for pasted blockquote entities.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -50,16 +64,17 @@ val telegramFixRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        richHtmlEntityBuilderFingerprint.instructionMatchesOrNull()?.forEach { match ->
-            val instruction = match.instruction as? TwoRegisterInstruction ?: return@forEach
-            val sourceRegister = instruction.registerA
+        richHtmlBlockquoteFingerprint.matchAllOrNull()?.forEach { match ->
+            val instruction = match.instruction as? TwoRegisterInstruction
+                ?: return@forEach
 
-            // Replace `iput-boolean vA, vB, ...->collapsed:Z` with
-            // `const/4 vA, 0`. The newly-created MessageEntityBlockquote
-            // therefore retains the default collapsed=false value.
+            // The matched instruction is the boolean read:
+            // iget-boolean vA, vB, Lorg/telegram/tgnet/TLRPC$MessageEntity;->collapsed:Z
+            // Replace only the destination value with false. The original
+            // receiver register is not modified.
             match.method.replaceInstruction(
                 match.index,
-                "const/4 v$sourceRegister, 0x0",
+                "const/4 v${instruction.registerA}, 0x0",
             )
         }
     }
