@@ -1,7 +1,6 @@
 package app.template.patches.telegram.content
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.classDefBy
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.bytecodePatch
@@ -9,22 +8,22 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 /**
- * Telegram 12.10.x handles rich-HTML paste inside the app's own
- * onTextContextMenuItem(I)Z overrides.
+ * Telegram 12.10.x performs Rich HTML paste handling directly inside
+ * onTextContextMenuItem(I)Z.
  *
- * Returning false for ACTION_PASTE is not sufficient: Telegram's override
- * consumes the action and the normal Android TextView/EditText paste path is
- * never reached.
+ * The patched 12.10.4 DEX was inspected directly. The matched methods all
+ * contain an existing invoke-super call to onTextContextMenuItem(I)Z. Rather
+ * than resolving the obfuscated superclass through classDefBy(), we reuse
+ * that exact method reference from the DEX instruction.
  *
- * For ACTION_PASTE we therefore call the matched class' immediate superclass
- * implementation and return its result. This preserves Android's normal paste
- * behaviour while skipping Telegram's rich-HTML paste implementation.
- *
- * The superclass is resolved from the actual matched DEX class, so this works
- * across the differently obfuscated Telegram / Telegram Plus / Telegram Web
- * builds instead of hard-coding an obfuscated class name.
+ * When ACTION_PASTE is requested, the method immediately delegates to the
+ * original superclass implementation. Other context-menu actions continue
+ * through Telegram's original implementation unchanged.
  */
 private val richHtmlPasteHandlerFingerprint = Fingerprint(
     name = "onTextContextMenuItem",
@@ -69,29 +68,50 @@ private val richHtmlPasteHandlerFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
     name = "Use normal paste",
-    description = "Skips Telegram's Rich HTML paste handler and delegates paste to the normal Android superclass implementation.",
+    description = "Skips Telegram's Rich HTML paste handler and falls back to the normal paste path.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
         TELEGRAM_PLUS_COMPATIBILITY,
         TELEGRAM_WEB_COMPATIBILITY,
     )
+
     dependsOn(telegramSpoofDependency())
 
     execute {
         richHtmlPasteHandlerFingerprint.matchAllOrNull()?.forEach { match ->
-            val superClass = classDefBy(match.originalMethod.definingClass).superclass
+            val superCall = match.method.implementation?.instructions
+                ?.firstOrNull { instruction ->
+                    instruction.opcode == Opcode.INVOKE_SUPER &&
+                        instruction is ReferenceInstruction &&
+                        instruction.reference is MethodReference
+                }
                 ?: return@forEach
 
-            match.method.addInstructions(0, """
-                const v0, 0x1020022
-                if-ne p1, v0, :normal
-                invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
-                move-result v0
-                return v0
-                :normal
-                nop
-            """)
+            val superMethod = (superCall as ReferenceInstruction).reference as MethodReference
+
+            val superMethodDescriptor = buildString {
+                append(superMethod.definingClass)
+                append("->")
+                append(superMethod.name)
+                append("(")
+                append(superMethod.parameterTypes.joinToString(""))
+                append(")")
+                append(superMethod.returnType)
+            }
+
+            match.method.addInstructions(
+                0,
+                """
+                    const v0, 0x1020022
+                    if-ne p1, v0, :normal
+                    invoke-super {p0, p1}, $superMethodDescriptor
+                    move-result v0
+                    return v0
+                    :normal
+                    nop
+                """.trimIndent(),
+            )
         }
     }
 }
