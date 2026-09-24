@@ -1,6 +1,7 @@
 package app.template.patches.telegram.content
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.classDefBy
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.bytecodePatch
@@ -10,14 +11,20 @@ import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
- * 12.10.x inlines the rich-HTML paste handler into the actual
- * onTextContextMenuItem(I)Z implementation. The old
- * ChatActivityEnterView.handleRichHtmlPaste() method no longer exists.
+ * Telegram 12.10.x handles rich-HTML paste inside the app's own
+ * onTextContextMenuItem(I)Z overrides.
  *
- * This fingerprint therefore follows the Android clipboard operations that
- * uniquely identify the rich-HTML branch instead of depending on R8 class or
- * method names. Returning false only for ACTION_PASTE lets the normal Android
- * TextView paste path handle the clipboard item.
+ * Returning false for ACTION_PASTE is not sufficient: Telegram's override
+ * consumes the action and the normal Android TextView/EditText paste path is
+ * never reached.
+ *
+ * For ACTION_PASTE we therefore call the matched class' immediate superclass
+ * implementation and return its result. This preserves Android's normal paste
+ * behaviour while skipping Telegram's rich-HTML paste implementation.
+ *
+ * The superclass is resolved from the actual matched DEX class, so this works
+ * across the differently obfuscated Telegram / Telegram Plus / Telegram Web
+ * builds instead of hard-coding an obfuscated class name.
  */
 private val richHtmlPasteHandlerFingerprint = Fingerprint(
     name = "onTextContextMenuItem",
@@ -62,7 +69,7 @@ private val richHtmlPasteHandlerFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
     name = "Use normal paste",
-    description = "Skips Telegram's Rich HTML paste handler and falls back to the normal paste path.",
+    description = "Skips Telegram's Rich HTML paste handler and delegates paste to the normal Android superclass implementation.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -73,10 +80,14 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
 
     execute {
         richHtmlPasteHandlerFingerprint.matchAllOrNull()?.forEach { match ->
+            val superClass = classDefBy(match.originalMethod.definingClass).superclass
+                ?: return@forEach
+
             match.method.addInstructions(0, """
                 const v0, 0x1020022
                 if-ne p1, v0, :normal
-                const/4 v0, 0x0
+                invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
+                move-result v0
                 return v0
                 :normal
                 nop
