@@ -65,6 +65,7 @@ private val needDrawBluredPreviewFingerprint = Fingerprint(
 /**
  * Telegram/Web 12.10.4 renamed the old closePhoto() method to e(ZZ)Z.
  * Telegram Plus 12.10.3.0 uses o0(ZZ)Z.
+ *
  * We identify the method semantically by its Runnable field read rather than
  * relying on the old method name or the obfuscated field name.
  */
@@ -91,6 +92,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         TELEGRAM_PLUS_COMPATIBILITY,
         TELEGRAM_WEB_COMPATIBILITY,
     )
+
     dependsOn(telegramSpoofDependency())
 
     execute {
@@ -103,20 +105,28 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             isRoundOnceFingerprint,
             needDrawBluredPreviewFingerprint,
         ).forEach { fingerprint ->
-            fingerprint.method.addInstructions(0, """
+            fingerprint.method.addInstructions(
+                0,
+                """
                 const/4 v0, 0x0
                 return v0
-            """)
+                """,
+            )
         }
 
-        secretMediaViewerCloseFingerprint.methodOrNull?.let { match ->
-            match.instructionMatches
-                .map { it.index }
-                .reversed()
-                .forEach { index ->
-                    val register = getInstruction<OneRegisterInstruction>(index).registerA
-                    replaceInstruction(index, "const/4 v$register, 0x0")
-                }
-        }
+        secretMediaViewerCloseFingerprint.instructionMatches
+            .map { it.index }
+            .reversed()
+            .forEach { index ->
+                val register = secretMediaViewerCloseFingerprint.method
+                    .getInstruction<OneRegisterInstruction>(index)
+                    .registerA
+
+                secretMediaViewerCloseFingerprint.method
+                    .replaceInstruction(
+                        index,
+                        "const/4 v$register, 0x0",
+                    )
+            }
     }
 }
