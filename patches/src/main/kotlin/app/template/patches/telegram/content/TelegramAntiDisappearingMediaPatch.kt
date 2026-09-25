@@ -1,4 +1,4 @@
-⁹package app.template.patches.telegram.content
+package app.template.patches.telegram.content
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
