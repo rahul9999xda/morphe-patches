@@ -1,17 +1,12 @@
-package app.template.patches.telegram.content
+⁹package app.template.patches.telegram.content
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
-import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
-import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 
 private val isSecretMediaInstanceFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessageObject;",
@@ -63,29 +58,23 @@ private val needDrawBluredPreviewFingerprint = Fingerprint(
 )
 
 /**
- * Telegram/Web 12.10.4 renamed the old closePhoto() method to e(ZZ)Z.
- * Telegram Plus 12.10.3.0 uses o0(ZZ)Z.
+ * Telegram/Web 12.10.4 and Telegram Plus 12.10.3.0 expose SecretMediaViewer's
+ * close routine through obfuscated methods. Earlier versions of this patch
+ * attempted to identify the close routine by matching every Runnable field read
+ * in SecretMediaViewer.e(ZZ)Z / its Plus equivalent.
  *
- * We identify the method semantically by its Runnable field read rather than
- * relying on the old method name or the obfuscated field name.
+ * DEX verification of the supplied 12.10.x builds shows that this is unsafe:
+ * the matched Runnable reads are lifecycle callbacks, including callbacks that
+ * are immediately invoked with Runnable.run(). Replacing those reads with
+ * const/4 0 can cause a null Runnable invocation and break the viewer.
+ *
+ * Therefore this patch deliberately does NOT modify SecretMediaViewer. The
+ * MessageObject-level gates below are the only verified hooks retained.
  */
-private val secretMediaViewerCloseFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/SecretMediaViewer;",
-    returnType = "Z",
-    parameters = listOf("Z", "Z"),
-    filters = listOf(
-        fieldAccess(
-            definingClass = "Lorg/telegram/ui/SecretMediaViewer;",
-            type = "Ljava/lang/Runnable;",
-            opcode = Opcode.IGET_OBJECT,
-        ),
-    ),
-)
-
 @Suppress("unused")
 val telegramAntiDisappearingMediaPatch = bytecodePatch(
     name = "Anti-disappearing media",
-    description = "Keeps view-once photos, videos and voice messages viewable indefinitely.",
+    description = "Keeps view-once photos, videos and voice messages viewable indefinitely without modifying SecretMediaViewer lifecycle callbacks.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -113,20 +102,5 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
                 """,
             )
         }
-
-        secretMediaViewerCloseFingerprint.instructionMatches
-            .map { it.index }
-            .reversed()
-            .forEach { index ->
-                val register = secretMediaViewerCloseFingerprint.method
-                    .getInstruction<OneRegisterInstruction>(index)
-                    .registerA
-
-                secretMediaViewerCloseFingerprint.method
-                    .replaceInstruction(
-                        index,
-                        "const/4 v$register, 0x0",
-                    )
-            }
     }
 }
