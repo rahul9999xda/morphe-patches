@@ -8,21 +8,25 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
 /**
- * Keeps Telegram's native Rich HTML paste path enabled.
+ * Preserves Telegram's native Rich HTML clipboard path and disables only the
+ * collapsed-state read used when applying blockquote formatting.
  *
- * The previous "Use normal paste" implementation bypassed Telegram's native
- * HTML clipboard handling and caused embedded links to be lost.
+ * DEX verification for Telegram/Web 12.10.5 and Plus 12.10.3.0 confirms:
+ * - native paste checks ClipboardManager / ClipDescription for text/html
+ * - reads ClipData.Item.getHtmlText()
+ * - parses the HTML into a Spannable/SpannableStringBuilder
+ * - URLSpan.getURL() is converted into Telegram URL entities
  *
- * This patch leaves the native HTML paste path intact and only forces the
- * MessageEntity.collapsed field read in MessageObject.addEntitiesToText()
- * to false. This prevents pasted collapsible Rich HTML blocks from carrying
- * the collapsed state into the outgoing message while preserving URL/TextUrl
- * entities and normal formatting.
+ * Therefore this patch does NOT replace or bypass the native HTML paste path.
+ * It only forces MessageEntity.collapsed to false in the shared
+ * MessageObject.addEntitiesToText(..., I):Z method.
  */
 private val richHtmlBlockquoteFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessageObject;",
     name = "addEntitiesToText",
     returnType = "Z",
     parameters = listOf(
@@ -36,9 +40,10 @@ private val richHtmlBlockquoteFingerprint = Fingerprint(
     ),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC\$MessageEntity;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC${'$'}MessageEntity;",
             name = "collapsed",
             type = "Z",
+            opcode = Opcode.IGET_BOOLEAN,
         ),
     ),
 )
@@ -46,7 +51,7 @@ private val richHtmlBlockquoteFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramFixRichHtmlPastePatch = bytecodePatch(
     name = "Fix Rich HTML paste sending",
-    description = "Keeps native Rich HTML paste and embedded links while disabling the collapsed state read for pasted blockquote entities.",
+    description = "Preserves native Rich HTML paste and embedded links while disabling collapsed blockquote state.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -57,17 +62,19 @@ val telegramFixRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        val match = richHtmlBlockquoteFingerprint.instructionMatches.first()
-        val index = match.index
+        val matches = richHtmlBlockquoteFingerprint.instructionMatches
+
+        if (matches.isEmpty()) {
+            throw IllegalStateException(
+                "Rich HTML target matched but MessageEntity.collapsed read was not found."
+            )
+        }
+
+        val match = matches.first()
         val instruction = match.instruction as TwoRegisterInstruction
 
-        // Original:
-        // iget-boolean vA, vB, Lorg/telegram/tgnet/TLRPC$MessageEntity;->collapsed:Z
-        //
-        // Keep the destination register and replace only the field read:
-        // const/4 vA, 0x0
         richHtmlBlockquoteFingerprint.method.replaceInstruction(
-            index,
+            match.index,
             "const/4 v${instruction.registerA}, 0x0",
         )
     }
