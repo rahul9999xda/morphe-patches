@@ -12,50 +12,56 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
 /**
- * Fixes Telegram's native Rich HTML paste send path.
+ * Unified Rich HTML paste fix for Telegram 12.10.5, Telegram Web 12.10.5
+ * and Telegram Plus 12.10.3.0.
  *
- * The native HTML clipboard path must remain enabled because it is the path
- * that preserves embedded URL/TextUrl entities.
+ * IMPORTANT:
+ * Do not bypass onTextContextMenuItem(ACTION_PASTE). Telegram's native HTML
+ * clipboard parser is the path that preserves embedded URL/TextUrl spans.
  *
- * The send-side problem is in MediaDataController.getEntities(). When a
- * Rich HTML blockquote span is converted into a
- * TLRPC$TL_messageEntityBlockquote, Telegram copies the span's collapsed
- * boolean into MessageEntity.collapsed. The resulting outgoing entity can
- * cause the pasted Rich HTML message to fail server-side, leaving a red
- * failed-to-send indicator.
+ * The stable cross-build problem is the collapsed flag read from
+ * TLRPC.MessageEntity while MessageObject.addEntitiesToText(...) normalises
+ * pasted entities. Force only that read to false. This keeps Telegram's
+ * native Rich HTML parser and embedded links intact, while removing the
+ * collapsed state from pasted blockquote/details entities.
  *
- * We therefore force ONLY this outgoing blockquote entity's collapsed value
- * to false. URL/TextUrl entities and all other HTML formatting remain on
- * Telegram's native implementation.
+ * DEX-verified target in all three supplied APKs:
+ * MessageObject.addEntitiesToText(
+ *     CharSequence,
+ *     ArrayList,
+ *     Z, Z, Z, Z, I
+ * ): Z
  *
- * Verified on:
- *  - Telegram 12.10.5
- *  - Telegram Web 12.10.5
- *  - Plus Messenger 12.10.3.0
+ * The target method contains an IGET_BOOLEAN read of:
+ * TLRPC$MessageEntity.collapsed:Z
  */
-private val richHtmlOutgoingEntityFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/MediaDataController;",
-    name = "getEntities",
-    returnType = "Ljava/util/ArrayList;",
+private val richHtmlCollapsedFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessageObject;",
+    name = "addEntitiesToText",
+    returnType = "Z",
     parameters = listOf(
-        "[Ljava/lang/CharSequence;",
+        "Ljava/lang/CharSequence;",
+        "Ljava/util/ArrayList;",
         "Z",
         "Z",
+        "Z",
+        "Z",
+        "I",
     ),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC\$MessageEntity;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC${'$'}MessageEntity;",
             name = "collapsed",
             type = "Z",
-            opcode = Opcode.IPUT_BOOLEAN,
+            opcode = Opcode.IGET_BOOLEAN,
         ),
     ),
 )
 
 @Suppress("unused")
-val telegramFixRichHtmlPastePatch = bytecodePatch(
-    name = "Fix Rich HTML paste sending",
-    description = "Preserves native Rich HTML paste and embedded links while preventing pasted blockquote entities from carrying the collapsed flag into outgoing messages.",
+val telegramDisableRichHtmlPastePatch = bytecodePatch(
+    name = "Fix Rich HTML paste",
+    description = "Keeps native Rich HTML paste and embedded links, while flattening pasted collapsible blockquote state.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -66,16 +72,10 @@ val telegramFixRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        val match = richHtmlOutgoingEntityFingerprint.instructionMatches.first()
+        val match = richHtmlCollapsedFingerprint.instructionMatches.first()
         val instruction = match.instruction as TwoRegisterInstruction
 
-        // Original:
-        // iput-boolean vA, vB,
-        //     Lorg/telegram/tgnet/TLRPC$MessageEntity;->collapsed:Z
-        //
-        // Keep the same value register and force it to false immediately
-        // before the entity is added to the outgoing entity list.
-        richHtmlOutgoingEntityFingerprint.method.replaceInstruction(
+        richHtmlCollapsedFingerprint.method.replaceInstruction(
             match.index,
             "const/4 v${instruction.registerA}, 0x0",
         )
