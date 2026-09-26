@@ -50,12 +50,22 @@ private val showSensitiveContentFingerprint = Fingerprint(
     parameters = emptyList(),
 )
 
-private val showCantOpenAlertFingerprint = Fingerprint(
+private val showCantOpenAlertTelegramFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "showCantOpenAlert",
     returnType = "V",
     parameters = listOf(
         "Lorg/telegram/ui/ActionBar/s2;",
+        "Ljava/lang/String;",
+    ),
+)
+
+private val showCantOpenAlertPlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "showCantOpenAlert",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/ui/ActionBar/i2;",
         "Ljava/lang/String;",
     ),
 )
@@ -67,7 +77,7 @@ private val checkChannelErrorFingerprint = Fingerprint(
     parameters = listOf("Ljava/lang/String;", "J"),
 )
 
-private val checkSensitiveFingerprint = Fingerprint(
+private val checkSensitiveTelegramFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkSensitive",
     returnType = "V",
@@ -79,7 +89,19 @@ private val checkSensitiveFingerprint = Fingerprint(
     ),
 )
 
-private val checkCanOpenChat2Fingerprint = Fingerprint(
+private val checkSensitivePlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkSensitive",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "J",
+        "Ljava/lang/Runnable;",
+        "Ljava/lang/Runnable;",
+    ),
+)
+
+private val checkCanOpenChat2TelegramFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkCanOpenChat",
     returnType = "Z",
@@ -89,7 +111,17 @@ private val checkCanOpenChat2Fingerprint = Fingerprint(
     ),
 )
 
-private val checkCanOpenChat3Fingerprint = Fingerprint(
+private val checkCanOpenChat2PlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+    ),
+)
+
+private val checkCanOpenChat3TelegramFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkCanOpenChat",
     returnType = "Z",
@@ -100,7 +132,18 @@ private val checkCanOpenChat3Fingerprint = Fingerprint(
     ),
 )
 
-private val checkCanOpenChat4Fingerprint = Fingerprint(
+private val checkCanOpenChat3PlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "Lorg/telegram/messenger/MessageObject;",
+    ),
+)
+
+private val checkCanOpenChat4TelegramFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkCanOpenChat",
     returnType = "Z",
@@ -111,6 +154,29 @@ private val checkCanOpenChat4Fingerprint = Fingerprint(
         "Lhe/e;",
     ),
 )
+
+private val checkCanOpenChat4PlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Lej/e$c;",
+    ),
+)
+
+private fun resolveVariantMethod(
+    telegramFingerprint: Fingerprint,
+    plusFingerprint: Fingerprint,
+    methodName: String,
+) = requireNotNull(
+    telegramFingerprint.methodOrNull ?: plusFingerprint.methodOrNull,
+) {
+    "Failed to match Telegram/Plus fingerprint for $methodName"
+}
+
 
 @Suppress("unused")
 val telegramBypassChannelRestrictionsPatch = bytecodePatch(
@@ -164,10 +230,19 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
             """,
         )
 
-        showCantOpenAlertFingerprint.method.addInstructions(0, "return-void")
+        resolveVariantMethod(
+            showCantOpenAlertTelegramFingerprint,
+            showCantOpenAlertPlusFingerprint,
+            "showCantOpenAlert",
+        ).addInstructions(0, "return-void")
+
         checkChannelErrorFingerprint.method.addInstructions(0, "return-void")
 
-        checkSensitiveFingerprint.method.addInstructions(
+        resolveVariantMethod(
+            checkSensitiveTelegramFingerprint,
+            checkSensitivePlusFingerprint,
+            "checkSensitive",
+        ).addInstructions(
             0,
             """
                 if-eqz p4, :skip
@@ -178,11 +253,23 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
         )
 
         listOf(
-            checkCanOpenChat2Fingerprint,
-            checkCanOpenChat3Fingerprint,
-            checkCanOpenChat4Fingerprint,
-        ).forEach { fingerprint ->
-            fingerprint.method.addInstructions(
+            resolveVariantMethod(
+                checkCanOpenChat2TelegramFingerprint,
+                checkCanOpenChat2PlusFingerprint,
+                "checkCanOpenChat/2",
+            ),
+            resolveVariantMethod(
+                checkCanOpenChat3TelegramFingerprint,
+                checkCanOpenChat3PlusFingerprint,
+                "checkCanOpenChat/3",
+            ),
+            resolveVariantMethod(
+                checkCanOpenChat4TelegramFingerprint,
+                checkCanOpenChat4PlusFingerprint,
+                "checkCanOpenChat/4",
+            ),
+        ).forEach { method ->
+            method.addInstructions(
                 0,
                 """
                     const/4 v0, 0x1
