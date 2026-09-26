@@ -8,45 +8,46 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
 /**
- * Keeps Telegram's native Rich HTML paste path enabled.
+ * Fixes Telegram's native Rich HTML paste send path.
  *
- * Telegram 12.10.4 preserves embedded URL spans only when the native
- * getHtmlText() -> Html.fromHtml() paste path is allowed to run. The old
- * "Use normal paste" patch bypassed that path and therefore lost embedded
- * links.
+ * The native HTML clipboard path must remain enabled because it is the path
+ * that preserves embedded URL/TextUrl entities.
  *
- * The remaining Rich HTML problem is the collapsed flag carried by a
- * MessageEntityBlockquote generated from Telegram's
- * 
-<blockquote>/
-    <details> HTML. MessageObject.addEntitiesToText() reads
- * MessageEntity.collapsed while normalising the pasted text. Force that read
- * to false so pasted rich blocks remain ordinary blockquotes instead of
- * carrying the collapsed state.
+ * The send-side problem is in MediaDataController.getEntities(). When a
+ * Rich HTML blockquote span is converted into a
+ * TLRPC$TL_messageEntityBlockquote, Telegram copies the span's collapsed
+ * boolean into MessageEntity.collapsed. The resulting outgoing entity can
+ * cause the pasted Rich HTML message to fail server-side, leaving a red
+ * failed-to-send indicator.
  *
- * This changes only the boolean value read from MessageEntity.collapsed; all
- * normal URL/TextUrl and formatting handling remains Telegram's original code.
+ * We therefore force ONLY this outgoing blockquote entity's collapsed value
+ * to false. URL/TextUrl entities and all other HTML formatting remain on
+ * Telegram's native implementation.
+ *
+ * Verified at DEX level on:
+ *  - Telegram 12.10.5 / 71052
+ *  - Telegram Web 12.10.5 / 71059
+ *  - Plus Messenger 12.10.3.0
  */
-private val richHtmlBlockquoteFingerprint = Fingerprint(
-    name = "addEntitiesToText",
-    returnType = "Z",
+private val richHtmlOutgoingEntityFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MediaDataController;",
+    name = "getEntities",
+    returnType = "Ljava/util/ArrayList;",
     parameters = listOf(
-        "Ljava/lang/CharSequence;",
-        "Ljava/util/ArrayList;",
+        "[Ljava/lang/CharSequence;",
         "Z",
         "Z",
-        "Z",
-        "Z",
-        "I",
     ),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC\$MessageEntity;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC\\$MessageEntity;",
             name = "collapsed",
             type = "Z",
+            opcode = Opcode.IPUT_BOOLEAN,
         ),
     ),
 )
@@ -54,7 +55,7 @@ private val richHtmlBlockquoteFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramFixRichHtmlPastePatch = bytecodePatch(
     name = "Fix Rich HTML paste sending",
-    description = "Keeps native Rich HTML paste and embedded links, while disabling the collapsed state read for pasted blockquote entities.",
+    description = "Preserves native Rich HTML paste and embedded links while preventing pasted blockquote entities from carrying the collapsed flag into outgoing messages.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -65,20 +66,21 @@ val telegramFixRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        richHtmlBlockquoteFingerprint.matchAllOrNull()?.forEach { match ->
-            val instructionMatch = match.instructionMatches.firstOrNull()
-                ?: return@forEach
-            val instruction = instructionMatch.instruction as? TwoRegisterInstruction
-                ?: return@forEach
+        val match = richHtmlOutgoingEntityFingerprint.instructionMatches.firstOrNull()
+            ?: error("Rich HTML outgoing collapsed-field fingerprint matched no instruction")
 
-            // The matched instruction is the boolean read:
-            // iget-boolean vA, vB, Lorg/telegram/tgnet/TLRPC$MessageEntity;->collapsed:Z
-            // Replace only the destination value with false. The original
-            // receiver register is not modified.
-            match.method.replaceInstruction(
-                instructionMatch.index,
-                "const/4 v${instruction.registerA}, 0x0",
-            )
-        }
+        val instruction = match.instruction as? TwoRegisterInstruction
+            ?: error("Rich HTML outgoing collapsed-field match is not a two-register instruction")
+
+        // Original:
+        // iput-boolean vA, vB,
+        //     Lorg/telegram/tgnet/TLRPC$MessageEntity;->collapsed:Z
+        //
+        // Keep the same value register and force it to false immediately
+        // before the entity is added to the outgoing entity list.
+        richHtmlOutgoingEntityFingerprint.method.replaceInstruction(
+            match.index,
+            "const/4 v${instruction.registerA}, 0x0",
+        )
     }
 }
