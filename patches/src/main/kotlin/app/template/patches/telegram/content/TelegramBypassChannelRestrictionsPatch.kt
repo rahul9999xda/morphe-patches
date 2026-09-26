@@ -163,20 +163,9 @@ private val checkCanOpenChat4PlusFingerprint = Fingerprint(
         "Landroid/os/Bundle;",
         "Lorg/telegram/ui/ActionBar/i2;",
         "Lorg/telegram/messenger/MessageObject;",
-        "Lej/e$c;",
+        "Lej/e${'$'}c;",
     ),
 )
-
-private fun resolveVariantMethod(
-    telegramFingerprint: Fingerprint,
-    plusFingerprint: Fingerprint,
-    methodName: String,
-) = requireNotNull(
-    telegramFingerprint.methodOrNull ?: plusFingerprint.methodOrNull,
-) {
-    "Failed to match Telegram/Plus fingerprint for $methodName"
-}
-
 
 @Suppress("unused")
 val telegramBypassChannelRestrictionsPatch = bytecodePatch(
@@ -191,6 +180,16 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
+        fun resolveVariantMethod(
+            telegramFingerprint: Fingerprint,
+            plusFingerprint: Fingerprint,
+            methodName: String,
+        ) = requireNotNull(
+            telegramFingerprint.methodOrNull ?: plusFingerprint.methodOrNull,
+        ) {
+            "Failed to match Telegram/Plus fingerprint for $methodName"
+        }
+
         getRestrictionReasonFingerprint.method.addInstructions(
             0,
             """
