@@ -1,11 +1,10 @@
 package app.template.patches.netmirror
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
-private const val SUPPORT_GATE_JS = """javascript:(function(){try{function x(){var a=document.body;if(!a)return;var e=a.querySelectorAll('*');for(var i=0;i<e.length;i++){var t=(e[i].innerText||'').trim();if(t.indexOf('We Need Support')!==-1||t.indexOf('Open 1 ADS per Day')!==-1){var n=e[i];for(var j=0;j<6&&n;j++,n=n.parentElement){var s=getComputedStyle(n);if(s.position==='fixed'||s.position==='absolute'||parseInt(s.zIndex||'0')>100){n.remove();break}}}}a.style.overflow='auto';document.documentElement.style.overflow='auto'}catch(_){} }x();new MutationObserver(x).observe(document.documentElement,{subtree:true,childList:true})})();"""
+private const val SUPPORT_GATE_JS = """(function(){try{function hide(){var d=document.documentElement;if(!d)return;var w=window.innerWidth||document.documentElement.clientWidth||0,h=window.innerHeight||document.documentElement.clientHeight||0,a=d.querySelectorAll('*');for(var i=0;i<a.length;i++){var e=a[i],t=(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim();if(t.indexOf('We Need Support')!==-1||t.indexOf('Open 1 ADS per Day')!==-1){var n=e,b=null;for(var j=0;j<10&&n&&n!==document.body;j++,n=n.parentElement){var c=getComputedStyle(n),r=n.getBoundingClientRect(),z=parseInt(c.zIndex||'0',10)||0;if(c.position==='fixed'||c.position==='absolute'||c.position==='sticky'||(w&&h&&r.width>w*.5&&r.height>h*.25)||z>10)b=n;}if(b){b.remove();}else{e.style.setProperty('display','none','important');e.style.setProperty('visibility','hidden','important');e.style.setProperty('pointer-events','none','important');}}}if(document.body){document.body.style.overflow='auto';document.body.style.removeProperty('position');}d.style.overflow='auto';}hide();new MutationObserver(function(){hide();}).observe(d=document.documentElement,{subtree:true,childList:true});}catch(e){}})();"""
 
 @Suppress("unused")
 val netMirrorDisableWebViewPopupPatch = bytecodePatch(
