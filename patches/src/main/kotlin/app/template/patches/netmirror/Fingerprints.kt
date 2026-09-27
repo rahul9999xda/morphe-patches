@@ -15,9 +15,6 @@ private const val MESSAGE = "Landroid/os/Message;"
 // Morphe's current Fingerprint API uses constructor parameters directly.
 // These are exact signatures from NetMirror 3.1 / versionCode 1.
 
-val getDeviceIdFingerprint = Fingerprint(
-    definingClass = RN_DEVICE, name = "getDeviceId", returnType = STRING, parameters = emptyList(),
-)
 val getAndroidIdSyncFingerprint = Fingerprint(
     definingClass = RN_DEVICE, name = "getAndroidIdSync", returnType = STRING, parameters = emptyList(),
 )
