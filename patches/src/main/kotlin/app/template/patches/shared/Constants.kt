@@ -1021,6 +1021,14 @@ val NETGUARD_COMPATIBILITY = Compatibility(
         targets = listOf(AppTarget(version = "2.337", versionCode = 2026080101))
     )
 
+val COMPATIBILITY_NETMIRROR = Compatibility(
+        name = "NetMirror",
+        packageName = "app.netmirror.nmv2",
+        apkFileType = ApkFileType.APK,
+        appIconColor = 0x101010,
+        targets = listOf(AppTarget(version = "3.1", versionCode = 1))
+    )
+
 val NETMONSTER_COMPATIBILITY = Compatibility(
         name = "NetMonster",
         packageName = "cz.mroczis.netmonster",
