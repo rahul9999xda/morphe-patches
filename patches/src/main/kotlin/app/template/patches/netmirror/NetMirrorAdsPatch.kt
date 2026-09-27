@@ -76,8 +76,8 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
 @Suppress("unused")
 val netMirrorBlockWebResourceRedirectPatch = bytecodePatch(
     name = "NetMirror: Block ad resource redirects",
-    description = "Blocks the concrete mobidetect.click host through the WebResourceRequest overload as well.",
-    default = true,
+    description = "Disabled diagnostically: this overload has no spare local register in the analyzed APK.",
+    default = false,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
