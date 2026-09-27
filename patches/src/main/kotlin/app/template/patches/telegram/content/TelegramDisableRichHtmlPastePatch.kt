@@ -44,7 +44,7 @@ private val richHtmlOutgoingEntityFingerprint = Fingerprint(
     ),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC\\$MessageEntity;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC${'$'}MessageEntity;"
             name = "collapsed",
             type = "Z",
             opcode = Opcode.IPUT_BOOLEAN,
