@@ -12,7 +12,7 @@ private fun blankStringMethodPatch(
 ) = bytecodePatch(
     name = name,
     description = description,
-    default = true,
+    default = false,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
@@ -37,7 +37,7 @@ private fun zeroDoubleMethodPatch(
 ) = bytecodePatch(
     name = name,
     description = description,
-    default = true,
+    default = false,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
