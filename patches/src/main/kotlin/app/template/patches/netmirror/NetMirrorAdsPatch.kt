@@ -7,7 +7,7 @@ import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 // Deliberately contains no backslash escapes or double quotes inside the JS.
 // This keeps Morphe's inline-smali compiler happy while still allowing the
 // script to remove both normal overlays and full-screen iframe gates.
-private const val SUPPORT_GATE_JS = """(function(){function clean(){try{var d=document.documentElement;if(!d)return;var w=window.innerWidth||d.clientWidth||0,h=window.innerHeight||d.clientHeight||0,a=d.querySelectorAll('iframe,body *');for(var i=0;i<a.length;i++){var e=a[i],t=String(e.innerText||e.textContent||'').toLowerCase(),s=String(e.src||'').toLowerCase(),r=e.getBoundingClientRect?e.getBoundingClientRect():null,c=getComputedStyle(e),big=r&&w&&h&&r.width>w*.5&&r.height>h*.5,fixed=c.position==='fixed'||c.position==='absolute'||c.position==='sticky',z=(parseInt(c.zIndex||'0',10)||0)>10;if(s.indexOf('mobidetect')>=0||s.indexOf('mobiledetect')>=0||t.indexOf('we need support')>=0||t.indexOf('open 1 ads per day')>=0||(big&&(fixed||z))){if(e!==document.body&&e!==document.documentElement)e.remove();}}if(document.body){document.body.style.overflow='auto';document.body.style.removeProperty('position');}d.style.overflow='auto';}catch(x){}}clean();setTimeout(clean,100);setTimeout(clean,500);setTimeout(clean,1500);setInterval(clean,3000);})();"""
+private const val SUPPORT_GATE_JS = """(function(){function clean(){try{var a=document.querySelectorAll('body *');for(var i=0;i<a.length;i++){var e=a[i],t=String(e.innerText||e.textContent||'').toLowerCase().trim().replaceAll(' ','');if(t!=='weneedsupport'&&t!=='open1adsperday')continue;var x=e;for(var j=0;j<8&&x&&x!==document.body&&x!==document.documentElement;j++,x=x.parentElement){var c=getComputedStyle(x),p=c.position,z=parseInt(c.zIndex||'0',10)||0;if(p==='fixed'||p==='absolute'||p==='sticky'||z>10){x.style.setProperty('display','none','important');break;}}}var f=document.querySelectorAll('iframe');for(var k=0;k<f.length;k++){var q=String(f[k].src||'').toLowerCase();if(q.indexOf('mobidetect')>=0||q.indexOf('mobiledetect')>=0)f[k].remove();}}catch(e){}}clean();setTimeout(clean,200);setTimeout(clean,1000);setTimeout(clean,2500);})();"""
 
 @Suppress("unused")
 val netMirrorDisableWebViewPopupPatch = bytecodePatch(
@@ -71,7 +71,7 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
 @Suppress("unused")
 val netMirrorBypassSupportGatePatch = bytecodePatch(
     name = "NetMirror: Bypass support gate",
-    description = "Removes the support and one-ad-per-day gate, including gates hosted inside a full-screen iframe, after the WebView page finishes loading.",
+    description = "Removes the support and one-ad-per-day gate, without removing the main page container; also removes Mobidetect iframes after the WebView page finishes loading.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
