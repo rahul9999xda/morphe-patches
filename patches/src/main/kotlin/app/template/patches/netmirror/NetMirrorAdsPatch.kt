@@ -8,7 +8,6 @@ import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
 private const val PROMISE = "Lcom/facebook/react/bridge/Promise;"
 private const val BLOCKED_HOST = "mobidetect.click"
-private const val VALUE_CALLBACK = "Landroid/webkit/ValueCallback;"
 
 @Suppress("unused")
 val netMirrorDisableWebViewPopupPatch = bytecodePatch(
@@ -28,29 +27,6 @@ val netMirrorDisableWebViewPopupPatch = bytecodePatch(
             )
         } catch (e: PatchException) {
             println("[NetMirror: Disable WebView popups] fingerprint not applied: ${e.message}")
-        }
-    }
-}
-
-@Suppress("unused")
-val netMirrorBypassSupportGatePatch = bytecodePatch(
-    name = "NetMirror: Bypass support/ad gate",
-    description = "Hides the server-delivered support overlay after a WebView page finishes loading, so the app does not depend on opening the ad redirect.",
-    default = true,
-) {
-    compatibleWith(NETMIRROR_COMPATIBILITY)
-    execute {
-        try {
-            webViewPageFinishedFingerprint.method.addInstructions(
-                0,
-                """
-                    const-string v0, "(function(){try{var n=['We Need Support','Open 1 ADS per Day','Click Here'];var e=document.querySelectorAll('body *');for(var i=0;i<e.length;i++){var t=(e[i].innerText||'').trim();if(n.some(function(x){return t.indexOf(x)>=0;})&&t.length<2500){var p=e[i];for(var j=0;j<6&&p.parentElement;j++){var s=getComputedStyle(p);if(s.position==='fixed'||s.position==='absolute'||parseInt(s.zIndex||'0',10)>10){p.style.setProperty('display','none','important');break}p=p.parentElement}}}}catch(_){}})();"
-                    const/4 v1, 0x0
-                    invoke-virtual {p1, v0, v1}, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
-                """.trimIndent(),
-            )
-        } catch (e: PatchException) {
-            println("[NetMirror: Bypass support/ad gate] fingerprint not applied: ${e.message}")
         }
     }
 }
@@ -94,6 +70,59 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
             )
         } catch (e: PatchException) {
             println("[NetMirror: Block ad redirect] fingerprint not applied: ${e.message}")
+        }
+    }
+}
+@Suppress("unused")
+val netMirrorBlockWebResourceRedirectPatch = bytecodePatch(
+    name = "NetMirror: Block ad resource redirects",
+    description = "Blocks the concrete mobidetect.click host through the WebResourceRequest overload as well.",
+    default = true,
+) {
+    compatibleWith(NETMIRROR_COMPATIBILITY)
+    execute {
+        try {
+            webViewRequestNavigationFingerprint.method.addInstructionsWithLabels(
+                0,
+                """
+                    invoke-interface {p2}, Landroid/webkit/WebResourceRequest;->getUrl()Landroid/net/Uri;
+                    move-result-object v0
+                    invoke-virtual {v0}, Landroid/net/Uri;->toString()Ljava/lang/String;
+                    move-result-object v0
+                    const-string v1, "$BLOCKED_HOST"
+                    invoke-virtual {v0, v1}, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
+                    move-result v0
+                    if-eqz v0, :netmirror_allow_webresource_url
+                    const/4 v0, 0x1
+                    return v0
+                    :netmirror_allow_webresource_url
+                    nop
+                """.trimIndent(),
+            )
+        } catch (e: PatchException) {
+            println("[NetMirror: Block ad resource redirects] fingerprint not applied: ${e.message}")
+        }
+    }
+}
+
+@Suppress("unused")
+val netMirrorBypassSupportGatePatch = bytecodePatch(
+    name = "NetMirror: Remove support/ad gate",
+    description = "Removes the server-delivered support/ad overlay after a WebView page finishes loading.",
+    default = true,
+) {
+    compatibleWith(NETMIRROR_COMPATIBILITY)
+    execute {
+        try {
+            webViewPageFinishedFingerprint.method.addInstructions(
+                0,
+                """
+                    const-string v0, "javascript:(function(){try{function c(){var a=document.querySelectorAll('body *');for(var i=0;i<a.length;i++){var e=a[i],t=(e.innerText||'').trim();if(t.indexOf('We Need Support')!==-1||t.indexOf('Open 1 ADS per Day')!==-1){for(var j=0;j<6&&e.parentElement;j++){var r=getComputedStyle(e);if(r.position==='fixed'||r.position==='absolute'||parseInt(r.zIndex||'0')>100)e=e.parentElement;else break;}e.style.display='none';e.remove();}}document.documentElement.style.overflow='auto';if(document.body)document.body.style.overflow='auto';}c();new MutationObserver(c).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}})();"
+                    invoke-virtual {p1, v0}, Landroid/webkit/WebView;->loadUrl(Ljava/lang/String;)V
+                """.trimIndent(),
+            )
+        } catch (e: PatchException) {
+            println("[NetMirror: Remove support/ad gate] fingerprint not applied: ${e.message}")
         }
     }
 }

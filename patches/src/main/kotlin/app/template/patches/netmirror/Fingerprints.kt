@@ -11,7 +11,6 @@ private const val WEB_RESOURCE_REQUEST = "Landroid/webkit/WebResourceRequest;"
 private const val STRING = "Ljava/lang/String;"
 private const val PROMISE = "Lcom/facebook/react/bridge/Promise;"
 private const val MESSAGE = "Landroid/os/Message;"
-private const val VALUE_CALLBACK = "Landroid/webkit/ValueCallback;"
 
 // Morphe's current Fingerprint API uses constructor parameters directly.
 // These are exact signatures from NetMirror 3.1 / versionCode 1.
@@ -73,6 +72,7 @@ val webViewRequestNavigationFingerprint = Fingerprint(
     returnType = "Z",
     parameters = listOf(WEBVIEW, WEB_RESOURCE_REQUEST),
 )
+
 
 val webViewPageFinishedFingerprint = Fingerprint(
     definingClass = WEBVIEW_CLIENT,
