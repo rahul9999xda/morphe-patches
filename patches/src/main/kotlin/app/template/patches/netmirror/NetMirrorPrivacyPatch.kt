@@ -9,12 +9,19 @@ private const val UNKNOWN = "unknown"
 @Suppress("unused")
 val netMirrorPrivacyDeviceTelemetryPatch = bytecodePatch(
     name = "NetMirror: Neutralize device telemetry",
-    description = "Neutralizes the confirmed NetMirror 3.1 RNDeviceInfo identifier/referrer/IP/MAC/carrier/fingerprint/serial values and the two persistent install/update timestamps without changing unrelated device-information APIs.",
+    description = "Replaces confirmed RNDeviceInfo telemetry values in NetMirror 3.1 with non-device-specific placeholders while preserving method return types.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
-        // High-confidence identifier / tracking inputs.
+        // RNDeviceInfo exposes getDeviceId() as a hardware/build identifier (Android
+        // implementations historically use the device board value). Neutralize it as
+        // well; this is distinct from getUniqueId()/ANDROID_ID.
+        getDeviceIdFingerprint.method.addInstructions(0, """
+            const-string v0, "$UNKNOWN"
+            return-object v0
+        """.trimIndent())
+
         getAndroidIdSyncFingerprint.method.addInstructions(0, """
             const-string v0, "$UNKNOWN"
             return-object v0
@@ -65,17 +72,8 @@ val netMirrorPrivacyDeviceTelemetryPatch = bytecodePatch(
             return-object v0
         """.trimIndent())
 
-        // Persistent installation/update timestamps are also device-history signals.
-        // Use a simple zero-wide return rather than the previous high16 construction.
-        // The async Promise methods delegate to these Sync implementations in RNDeviceInfo.
-        getFirstInstallTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/16 v0, 0x0
-            return-wide v0
-        """.trimIndent())
-
-        getLastUpdateTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/16 v0, 0x0
-            return-wide v0
-        """.trimIndent())
+        // Timestamp methods are intentionally left untouched in this diagnostic revision.
+        // The prior revision used a wide-constant insertion that emitted return-wide before
+        // initialization on v3.1, which can fail DEX verification during startup.
     }
 }
