@@ -1,9 +1,9 @@
 package app.template.patches.netmirror
 
-import app.morphe.patcher.PatchException
+import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
-import app.template.patches.shared.Constants.COMPATIBILITY_NETMIRROR
+import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
 private fun blankStringMethodPatch(
     name: String,
@@ -14,7 +14,7 @@ private fun blankStringMethodPatch(
     description = description,
     default = true,
 ) {
-    compatibleWith(COMPATIBILITY_NETMIRROR)
+    compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
         try {
             fingerprintProvider().method.addInstructions(
@@ -30,7 +30,7 @@ private fun blankStringMethodPatch(
     }
 }
 
-private fun zeroLongMethodPatch(
+private fun zeroDoubleMethodPatch(
     name: String,
     description: String,
     fingerprintProvider: () -> app.morphe.patcher.Fingerprint,
@@ -39,7 +39,7 @@ private fun zeroLongMethodPatch(
     description = description,
     default = true,
 ) {
-    compatibleWith(COMPATIBILITY_NETMIRROR)
+    compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
         try {
             fingerprintProvider().method.addInstructions(
@@ -119,13 +119,13 @@ val netMirrorDisableSerialPatch = blankStringMethodPatch(
 ) { getSerialNumberSyncFingerprint }
 
 @Suppress("unused")
-val netMirrorDisableInstallTimePatch = zeroLongMethodPatch(
+val netMirrorDisableInstallTimePatch = zeroDoubleMethodPatch(
     "NetMirror: Disable first-install telemetry",
     "Stops first-install timestamp exposure through RNDeviceInfo.",
 ) { getFirstInstallTimeSyncFingerprint }
 
 @Suppress("unused")
-val netMirrorDisableUpdateTimePatch = zeroLongMethodPatch(
+val netMirrorDisableUpdateTimePatch = zeroDoubleMethodPatch(
     "NetMirror: Disable update-time telemetry",
     "Stops last-update timestamp exposure through RNDeviceInfo.",
 ) { getLastUpdateTimeSyncFingerprint }

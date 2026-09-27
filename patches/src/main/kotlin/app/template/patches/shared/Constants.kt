@@ -1021,7 +1021,7 @@ val NETGUARD_COMPATIBILITY = Compatibility(
         targets = listOf(AppTarget(version = "2.337", versionCode = 2026080101))
     )
 
-val COMPATIBILITY_NETMIRROR = Compatibility(
+val NETMIRROR_COMPATIBILITY = Compatibility(
         name = "NetMirror",
         packageName = "app.netmirror.nmv2",
         apkFileType = ApkFileType.APK,

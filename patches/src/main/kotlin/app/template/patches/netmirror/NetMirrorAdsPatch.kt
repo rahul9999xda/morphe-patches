@@ -1,10 +1,10 @@
 package app.template.patches.netmirror
 
-import app.morphe.patcher.PatchException
+import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.patch.bytecodePatch
-import app.template.patches.shared.Constants.COMPATIBILITY_NETMIRROR
+import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
 private const val PROMISE = "Lcom/facebook/react/bridge/Promise;"
 private const val BLOCKED_HOST = "mobidetect.click"
@@ -15,7 +15,7 @@ val netMirrorDisableWebViewPopupPatch = bytecodePatch(
     description = "Prevents WebView-created secondary windows used by popup/redirect flows.",
     default = true,
 ) {
-    compatibleWith(COMPATIBILITY_NETMIRROR)
+    compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
         try {
             onCreateWindowFingerprint.method.addInstructions(
@@ -37,7 +37,7 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
     description = "Blocks the embedded mobidetect.click redirect in WebView navigation and external URL launches.",
     default = true,
 ) {
-    compatibleWith(COMPATIBILITY_NETMIRROR)
+    compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
         try {
             webViewStringNavigationFingerprint.method.addInstructionsWithLabels(
@@ -58,7 +58,7 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
                 0,
                 """
                     const-string v0, "$BLOCKED_HOST"
-                    invoke-virtual {p1, v0}, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
+                    invoke-virtual {p2, v0}, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
                     move-result v0
                     if-eqz v0, :netmirror_allow_external_url
                     const-string v0, ""

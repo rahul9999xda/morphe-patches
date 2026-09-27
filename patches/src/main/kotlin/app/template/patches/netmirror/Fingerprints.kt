@@ -1,6 +1,6 @@
 package app.template.patches.netmirror
 
-import app.morphe.patcher.fingerprint
+import app.morphe.patcher.Fingerprint
 
 private const val RN_DEVICE = "Lcom/learnium/RNDeviceInfo/RNDeviceModule;"
 private const val WEBVIEW_CHROME = "Lcom/reactnativecommunity/webview/c;"
@@ -12,116 +12,70 @@ private const val STRING = "Ljava/lang/String;"
 private const val PROMISE = "Lcom/facebook/react/bridge/Promise;"
 private const val MESSAGE = "Landroid/os/Message;"
 
-// These are intentionally signature-anchored: all target classes are present in the supplied
-// APK and the signatures are exact. This is more robust here than hard-coding DEX offsets.
-val getAndroidIdSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getAndroidIdSync")
-    returnType(STRING)
-    parameterTypes()
-}
+// Morphe's current Fingerprint API uses constructor parameters directly.
+// These are exact signatures from NetMirror 3.1 / versionCode 1.
 
-val getUniqueIdSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getUniqueIdSync")
-    returnType(STRING)
-    parameterTypes()
-}
+val getAndroidIdSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getAndroidIdSync", returnType = STRING, parameters = emptyList(),
+)
+val getUniqueIdSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getUniqueIdSync", returnType = STRING, parameters = emptyList(),
+)
+val getInstanceIdSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getInstanceIdSync", returnType = STRING, parameters = emptyList(),
+)
+val getInstallReferrerSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getInstallReferrerSync", returnType = STRING, parameters = emptyList(),
+)
+val getInstallerPackageNameSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getInstallerPackageNameSync", returnType = STRING, parameters = emptyList(),
+)
+val getIpAddressSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getIpAddressSync", returnType = STRING, parameters = emptyList(),
+)
+val getMacAddressSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getMacAddressSync", returnType = STRING, parameters = emptyList(),
+)
+val getCarrierSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getCarrierSync", returnType = STRING, parameters = emptyList(),
+)
+val getFingerprintSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getFingerprintSync", returnType = STRING, parameters = emptyList(),
+)
+val getSerialNumberSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getSerialNumberSync", returnType = STRING, parameters = emptyList(),
+)
+val getFirstInstallTimeSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getFirstInstallTimeSync", returnType = "D", parameters = emptyList(),
+)
+val getLastUpdateTimeSyncFingerprint = Fingerprint(
+    definingClass = RN_DEVICE, name = "getLastUpdateTimeSync", returnType = "D", parameters = emptyList(),
+)
 
-val getInstanceIdSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getInstanceIdSync")
-    returnType(STRING)
-    parameterTypes()
-}
+val onCreateWindowFingerprint = Fingerprint(
+    definingClass = WEBVIEW_CHROME,
+    name = "onCreateWindow",
+    returnType = "Z",
+    parameters = listOf(WEBVIEW, "Z", "Z", MESSAGE),
+)
 
-val getInstallReferrerSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getInstallReferrerSync")
-    returnType(STRING)
-    parameterTypes()
-}
+val webViewStringNavigationFingerprint = Fingerprint(
+    definingClass = WEBVIEW_CLIENT,
+    name = "shouldOverrideUrlLoading",
+    returnType = "Z",
+    parameters = listOf(WEBVIEW, STRING),
+)
 
-val getInstallerPackageNameSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getInstallerPackageNameSync")
-    returnType(STRING)
-    parameterTypes()
-}
+val webViewRequestNavigationFingerprint = Fingerprint(
+    definingClass = WEBVIEW_CLIENT,
+    name = "shouldOverrideUrlLoading",
+    returnType = "Z",
+    parameters = listOf(WEBVIEW, WEB_RESOURCE_REQUEST),
+)
 
-val getIpAddressSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getIpAddressSync")
-    returnType(STRING)
-    parameterTypes()
-}
-
-val getMacAddressSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getMacAddressSync")
-    returnType(STRING)
-    parameterTypes()
-}
-
-val getCarrierSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getCarrierSync")
-    returnType(STRING)
-    parameterTypes()
-}
-
-val getFingerprintSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getFingerprintSync")
-    returnType(STRING)
-    parameterTypes()
-}
-
-val getSerialNumberSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getSerialNumberSync")
-    returnType(STRING)
-    parameterTypes()
-}
-
-val getFirstInstallTimeSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getFirstInstallTimeSync")
-    returnType("D")
-    parameterTypes()
-}
-
-val getLastUpdateTimeSyncFingerprint = fingerprint {
-    definingClass(RN_DEVICE)
-    name("getLastUpdateTimeSync")
-    returnType("D")
-    parameterTypes()
-}
-
-val onCreateWindowFingerprint = fingerprint {
-    definingClass(WEBVIEW_CHROME)
-    name("onCreateWindow")
-    returnType("Z")
-    parameterTypes(WEBVIEW, "Z", "Z", MESSAGE)
-}
-
-val webViewStringNavigationFingerprint = fingerprint {
-    definingClass(WEBVIEW_CLIENT)
-    name("shouldOverrideUrlLoading")
-    returnType("Z")
-    parameterTypes(WEBVIEW, STRING)
-}
-
-val webViewRequestNavigationFingerprint = fingerprint {
-    definingClass(WEBVIEW_CLIENT)
-    name("shouldOverrideUrlLoading")
-    returnType("Z")
-    parameterTypes(WEBVIEW, WEB_RESOURCE_REQUEST)
-}
-
-val intentOpenUrlFingerprint = fingerprint {
-    definingClass(INTENT_MODULE)
-    name("openURL")
-    returnType("V")
-    parameterTypes(STRING, PROMISE)
-}
+val intentOpenUrlFingerprint = Fingerprint(
+    definingClass = INTENT_MODULE,
+    name = "openURL",
+    returnType = "V",
+    parameters = listOf(STRING, PROMISE),
+)
