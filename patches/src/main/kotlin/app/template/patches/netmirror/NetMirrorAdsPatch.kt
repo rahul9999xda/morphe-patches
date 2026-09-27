@@ -4,15 +4,18 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
-// Deliberately contains no backslash escapes or double quotes inside the JS.
-// This keeps Morphe's inline-smali compiler happy while still allowing the
-// script to remove both normal overlays and full-screen iframe gates.
-private const val SUPPORT_GATE_JS = """(function(){function norm(s){return String(s||'').toLowerCase().split(' ').join('').trim()}function full(r,w,h){return r&&r.width>=w*.75&&r.height>=h*.75}function positioned(e){var c=getComputedStyle(e),p=c.position,z=parseInt(c.zIndex||'0',10)||0;return p==='fixed'||p==='absolute'||p==='sticky'||z>20}function hideGate(){try{var w=window.innerWidth||document.documentElement.clientWidth||0,h=window.innerHeight||document.documentElement.clientHeight||0,els=document.querySelectorAll('body *'),hit=null;for(var i=0;i<els.length;i++){var e=els[i],t=norm(e.innerText||e.textContent||'');if(t==='weneedsupport'||t==='open1adsperday'){hit=e;break}}if(!hit)return false;var x=hit;for(var j=0;j<12&&x&&x!==document.body&&x!==document.documentElement;j++,x=x.parentElement){if(positioned(x)){x.style.setProperty('display','none','important');break}}var top=document.elementFromPoint(w/2,h/2);for(var k=0;k<8&&top&&top!==document.body&&top!==document.documentElement;k++,top=top.parentElement){var r=top.getBoundingClientRect(),c=getComputedStyle(top),p=c.position,z=parseInt(c.zIndex||'0',10)||0,f=String(c.filter||'').toLowerCase(),bf=String(c.backdropFilter||'').toLowerCase(),bg=String(c.backgroundColor||'').toLowerCase(),o=parseFloat(c.opacity||'1');if(full(r,w,h)&&(p==='fixed'||p==='absolute'||p==='sticky'||z>20)&&(f.indexOf('blur')>=0||bf.indexOf('blur')>=0||bg.indexOf('rgba')>=0||o<1)){top.style.setProperty('display','none','important');break}}var frames=document.querySelectorAll('iframe');for(var n=0;n<frames.length;n++){var fr=String(frames[n].src||'').toLowerCase();if(fr.indexOf('mobidetect')>=0||fr.indexOf('mobiledetect')>=0)frames[n].style.setProperty('display','none','important')}return true}catch(e){return false}}hideGate();setTimeout(hideGate,150);setTimeout(hideGate,400);setTimeout(hideGate,1000);setTimeout(hideGate,2500);setTimeout(hideGate,5000);try{if(document.documentElement&&typeof MutationObserver!=='undefined'){var ob=new MutationObserver(hideGate);ob.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){ob.disconnect()},15000)}}catch(e){}})();"""
+// Evidence-based support-gate strategy for NetMirror 3.1:
+// Do NOT delete or blur DOM nodes. The v3.1 Hermes bundle contains the
+// callback text `pressfromAPP()` used by the app's ad-return flow. We leave
+// the original support screen intact and invoke that same callback after
+// the documented 20-second wait. This avoids guessing historical CSS/DOM
+// selectors and avoids destroying the catalogue/backdrop hierarchy.
+private const val SUPPORT_WAIT_JS = """(function(){function unlock(){try{if(typeof pressfromAPP==='function'){pressfromAPP();return true}}catch(e){}return false}setTimeout(function(){if(!unlock()){setTimeout(function(){unlock()},1000);setTimeout(function(){unlock()},5000)}},20000)})();"""
 
 @Suppress("unused")
 val netMirrorDisableWebViewPopupPatch = bytecodePatch(
     name = "NetMirror: Disable WebView popups",
-    description = "Prevents WebView-created secondary windows used by popup and redirect flows.",
+    description = "Prevents secondary WebView windows used by the support-ad redirect flow from opening.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
@@ -30,11 +33,14 @@ val netMirrorDisableWebViewPopupPatch = bytecodePatch(
 @Suppress("unused")
 val netMirrorBlockRedirectPatch = bytecodePatch(
     name = "NetMirror: Block tracking redirects",
-    description = "Blocks Mobidetect navigation in WebView and external URL intents without altering normal navigation.",
+    description = "Blocks Mobidetect/MobileDetect navigation and external intents without altering normal navigation.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
     execute {
+        // The WebResourceRequest overload in the original v3.1 DEX already
+        // delegates to this String overload. Do not inject into that 3-register
+        // method: there are no spare local registers.
         webViewStringNavigationFingerprint.method.addInstructions(
             0,
             """
@@ -79,9 +85,9 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
 }
 
 @Suppress("unused")
-val netMirrorBypassSupportGatePatch = bytecodePatch(
-    name = "NetMirror: Bypass support gate",
-    description = "Removes the support and one-ad-per-day gate using exact gate text plus elementFromPoint backdrop detection; hides Mobidetect iframes. The WebResourceRequest overload is intentionally not patched because the original DEX already delegates it to the String overload.",
+val netMirrorTimedSupportUnlockPatch = bytecodePatch(
+    name = "NetMirror: Complete support wait after 20 seconds",
+    description = "Keeps the original support screen intact and invokes the v3.1 pressfromAPP return callback after the documented 20-second ad wait; no DOM removal or blur manipulation.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
@@ -91,7 +97,7 @@ val netMirrorBypassSupportGatePatch = bytecodePatch(
         method.addInstructions(
             insertIndex,
             """
-                const-string v0, "$SUPPORT_GATE_JS"
+                const-string v0, "$SUPPORT_WAIT_JS"
                 const/4 p0, 0x0
                 invoke-virtual { p1, v0, p0 }, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
             """.trimIndent(),
