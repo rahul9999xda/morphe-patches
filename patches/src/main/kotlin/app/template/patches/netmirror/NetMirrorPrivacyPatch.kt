@@ -64,15 +64,8 @@ val netMirrorPrivacyDeviceTelemetryPatch = bytecodePatch(
             return-object v0
         """.trimIndent())
 
-        // Match RNDeviceInfo's own exception fallback (-1.0) instead of epoch 0.
-        getFirstInstallTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/high16 v0, 0xbff0
-            return-wide v0
-        """.trimIndent())
-
-        getLastUpdateTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/high16 v0, 0xbff0
-            return-wide v0
-        """.trimIndent())
+        // Timestamp methods are intentionally left untouched in this diagnostic revision.
+        // The prior revision used a wide-constant insertion that emitted return-wide before
+        // initialization on v3.1, which can fail DEX verification during startup.
     }
 }

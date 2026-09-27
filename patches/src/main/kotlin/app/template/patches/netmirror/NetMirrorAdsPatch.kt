@@ -38,9 +38,10 @@ val netMirrorAutomateSupportAdClickPatch = bytecodePatch(
         method.addInstructions(
             insertIndex,
             """
-                const-string v0, "$SUPPORT_AD_CLICK_JS"
-                const/4 p0, 0x0
-                invoke-virtual { p1, v0, p0 }, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
+                move-object v0, p1
+                const-string v1, "$SUPPORT_AD_CLICK_JS"
+                const/4 v2, 0x0
+                invoke-virtual { v0, v1, v2 }, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
             """.trimIndent(),
         )
     }
