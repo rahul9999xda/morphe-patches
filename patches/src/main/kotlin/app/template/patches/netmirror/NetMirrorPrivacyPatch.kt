@@ -1,7 +1,9 @@
 package app.template.patches.netmirror
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.bytecodePatch
+import com.android.tools.smali.dexlib2.Opcode
 import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 
 private const val UNKNOWN = "unknown"
@@ -64,15 +66,27 @@ val netMirrorPrivacyDeviceTelemetryPatch = bytecodePatch(
             return-object v0
         """.trimIndent())
 
-        // Match RNDeviceInfo's own exception fallback (-1.0) instead of epoch 0.
-        getFirstInstallTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/high16 v0, 0xbff0
-            return-wide v0
-        """.trimIndent())
-
-        getLastUpdateTimeSyncFingerprint.method.addInstructions(0, """
-            const-wide/high16 v0, 0xbff0
-            return-wide v0
-        """.trimIndent())
+        // These two methods contain try/catch blocks. Inserting a return at
+        // instruction 0 can move a catch handler to the entry point and make
+        // ART reject the method. Preserve the existing control-flow graph and
+        // replace only the normal-path return. The catch-path already returns
+        // -1.0 in the stock RNDeviceInfo implementation.
+        for (fingerprint in listOf(
+            getFirstInstallTimeSyncFingerprint,
+            getLastUpdateTimeSyncFingerprint,
+        )) {
+            val method = fingerprint.method
+            val returnIndex = method.implementation!!.instructions.indexOfFirst {
+                it.opcode == Opcode.RETURN_WIDE
+            }
+            check(returnIndex >= 0) { "Could not locate normal return in ${method.name}" }
+            method.replaceInstruction(
+                returnIndex,
+                """
+                    const-wide/high16 v0, 0xbff0
+                    return-wide v0
+                """.trimIndent(),
+            )
+        }
     }
 }
