@@ -29,7 +29,7 @@ private val richHtmlEntityBuilderFingerprint = Fingerprint(
     parameters = listOf("[Ljava/lang/CharSequence;", "Z", "Z"),
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC$TL_messageEntityBlockquote;",
+            definingClass = "Lorg/telegram/tgnet/TLRPC${'$'}TL_messageEntityBlockquote;",
             name = "collapsed",
             type = "Z",
         ),
@@ -50,17 +50,17 @@ val telegramFixRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        richHtmlEntityBuilderFingerprint.instructionMatchesOrNull()?.forEach { match ->
-            val instruction = match.instruction as? TwoRegisterInstruction ?: return@forEach
-            val sourceRegister = instruction.registerA
+        val match = richHtmlEntityBuilderFingerprint.instructionMatches.first()
+        val instruction = match.instruction as? TwoRegisterInstruction
+            ?: return@execute
+        val sourceRegister = instruction.registerA
 
-            // Replace `iput-boolean vA, vB, ...->collapsed:Z` with
-            // `const/4 vA, 0`. The newly-created MessageEntityBlockquote
-            // therefore retains the default collapsed=false value.
-            match.method.replaceInstruction(
-                match.index,
-                "const/4 v$sourceRegister, 0x0",
-            )
-        }
+        // Replace the matched collapsed-field write with a constant false.
+        // The native Rich HTML paste path remains enabled, so embedded URL
+        // entities are preserved.
+        richHtmlEntityBuilderFingerprint.method.replaceInstruction(
+            match.index,
+            "const/4 v$sourceRegister, 0x0",
+        )
     }
 }
