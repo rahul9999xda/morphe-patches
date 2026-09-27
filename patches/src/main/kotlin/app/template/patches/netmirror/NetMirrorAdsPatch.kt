@@ -7,7 +7,7 @@ import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
 // Deliberately contains no backslash escapes or double quotes inside the JS.
 // This keeps Morphe's inline-smali compiler happy while still allowing the
 // script to remove both normal overlays and full-screen iframe gates.
-private const val SUPPORT_GATE_JS = """(function(){function norm(s){return String(s||'').toLowerCase().split(' ').join('').trim()}function full(r,w,h){return r&&r.width>=w*.75&&r.height>=h*.75}function visualOverlay(e,w,h){try{var c=getComputedStyle(e),r=e.getBoundingClientRect(),p=c.position,z=parseInt(c.zIndex||'0',10)||0,f=String(c.filter||'').toLowerCase(),bf=String(c.backdropFilter||'').toLowerCase(),bg=String(c.backgroundColor||'').toLowerCase(),o=parseFloat(c.opacity||'1');return full(r,w,h)&&(p==='fixed'||p==='absolute'||p==='sticky'||z>20)&&(f.indexOf('blur')>=0||bf.indexOf('blur')>=0||bg.indexOf('rgba')>=0||o<1)}catch(x){return false}}function clean(){try{var w=window.innerWidth||document.documentElement.clientWidth||0,h=window.innerHeight||document.documentElement.clientHeight||0,found=false,els=document.querySelectorAll('body *');for(var i=0;i<els.length;i++){var e=els[i],t=norm(e.innerText||e.textContent||'');if(t!=='weneedsupport'&&t!=='open1adsperday')continue;found=true;var x=e;for(var j=0;j<12&&x&&x!==document.body&&x!==document.documentElement;j++,x=x.parentElement){var c=getComputedStyle(x),r=x.getBoundingClientRect(),p=c.position,z=parseInt(c.zIndex||'0',10)||0;if(p==='fixed'||p==='absolute'||p==='sticky'||z>20){x.style.setProperty('display','none','important');break;}}}if(!found)return;for(var k=0;k<els.length;k++){var q=els[k];if(visualOverlay(q,w,h))q.style.setProperty('display','none','important');}for(var m=0;m<els.length;m++){var u=els[m],uc=getComputedStyle(u),ur=u.getBoundingClientRect(),uf=String(uc.filter||'').toLowerCase();if(full(ur,w,h)&&uf.indexOf('blur')>=0)u.style.setProperty('filter','none','important');}var frames=document.querySelectorAll('iframe');for(var n=0;n<frames.length;n++){var fr=String(frames[n].src||'').toLowerCase();if(fr.indexOf('mobidetect')>=0||fr.indexOf('mobiledetect')>=0)frames[n].style.setProperty('display','none','important');}}catch(e){}}clean();setTimeout(clean,150);setTimeout(clean,400);setTimeout(clean,1000);setTimeout(clean,2500);setTimeout(clean,5000);try{if(document.documentElement&&typeof MutationObserver!=='undefined'){var ob=new MutationObserver(clean);ob.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){ob.disconnect()},15000)}}catch(e){}})();"""
+private const val SUPPORT_GATE_JS = """(function(){function norm(s){return String(s||'').toLowerCase().split(' ').join('').trim()}function full(r,w,h){return r&&r.width>=w*.75&&r.height>=h*.75}function positioned(e){var c=getComputedStyle(e),p=c.position,z=parseInt(c.zIndex||'0',10)||0;return p==='fixed'||p==='absolute'||p==='sticky'||z>20}function hideGate(){try{var w=window.innerWidth||document.documentElement.clientWidth||0,h=window.innerHeight||document.documentElement.clientHeight||0,els=document.querySelectorAll('body *'),hit=null;for(var i=0;i<els.length;i++){var e=els[i],t=norm(e.innerText||e.textContent||'');if(t==='weneedsupport'||t==='open1adsperday'){hit=e;break}}if(!hit)return false;var x=hit;for(var j=0;j<12&&x&&x!==document.body&&x!==document.documentElement;j++,x=x.parentElement){if(positioned(x)){x.style.setProperty('display','none','important');break}}var top=document.elementFromPoint(w/2,h/2);for(var k=0;k<8&&top&&top!==document.body&&top!==document.documentElement;k++,top=top.parentElement){var r=top.getBoundingClientRect(),c=getComputedStyle(top),p=c.position,z=parseInt(c.zIndex||'0',10)||0,f=String(c.filter||'').toLowerCase(),bf=String(c.backdropFilter||'').toLowerCase(),bg=String(c.backgroundColor||'').toLowerCase(),o=parseFloat(c.opacity||'1');if(full(r,w,h)&&(p==='fixed'||p==='absolute'||p==='sticky'||z>20)&&(f.indexOf('blur')>=0||bf.indexOf('blur')>=0||bg.indexOf('rgba')>=0||o<1)){top.style.setProperty('display','none','important');break}}var frames=document.querySelectorAll('iframe');for(var n=0;n<frames.length;n++){var fr=String(frames[n].src||'').toLowerCase();if(fr.indexOf('mobidetect')>=0||fr.indexOf('mobiledetect')>=0)frames[n].style.setProperty('display','none','important')}return true}catch(e){return false}}hideGate();setTimeout(hideGate,150);setTimeout(hideGate,400);setTimeout(hideGate,1000);setTimeout(hideGate,2500);setTimeout(hideGate,5000);try{if(document.documentElement&&typeof MutationObserver!=='undefined'){var ob=new MutationObserver(hideGate);ob.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){ob.disconnect()},15000)}}catch(e){}})();"""
 
 @Suppress("unused")
 val netMirrorDisableWebViewPopupPatch = bytecodePatch(
@@ -55,30 +55,6 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
             """.trimIndent(),
         )
 
-        webViewRequestNavigationFingerprint.method.addInstructions(
-            0,
-            """
-                invoke-interface { p2 }, Landroid/webkit/WebResourceRequest;->getUrl()Landroid/net/Uri;
-                move-result-object v0
-                invoke-virtual { v0 }, Landroid/net/Uri;->toString()Ljava/lang/String;
-                move-result-object v0
-                invoke-virtual { v0 }, Ljava/lang/String;->toLowerCase()Ljava/lang/String;
-                move-result-object v0
-                const-string v1, "mobidetect"
-                invoke-virtual { v0, v1 }, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
-                move-result v1
-                if-nez v1, :nm_block_request
-                const-string v1, "mobiledetect"
-                invoke-virtual { v0, v1 }, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
-                move-result v1
-                if-eqz v1, :nm_continue_request
-                :nm_block_request
-                const/4 v0, 0x1
-                return v0
-                :nm_continue_request
-            """.trimIndent(),
-        )
-
         intentOpenUrlFingerprint.method.addInstructions(
             0,
             """
@@ -105,7 +81,7 @@ val netMirrorBlockRedirectPatch = bytecodePatch(
 @Suppress("unused")
 val netMirrorBypassSupportGatePatch = bytecodePatch(
     name = "NetMirror: Bypass support gate",
-    description = "Removes the support and one-ad-per-day gate, removes its full-screen backdrop, clears a gate-induced full-page blur, and hides Mobidetect iframes after the WebView page finishes loading.",
+    description = "Removes the support and one-ad-per-day gate using exact gate text plus elementFromPoint backdrop detection; hides Mobidetect iframes. The WebResourceRequest overload is intentionally not patched because the original DEX already delegates it to the String overload.",
     default = true,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
