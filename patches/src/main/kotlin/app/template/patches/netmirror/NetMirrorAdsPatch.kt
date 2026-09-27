@@ -1,6 +1,6 @@
 package app.template.patches.netmirror
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.NETMIRROR_COMPATIBILITY
@@ -35,12 +35,12 @@ val netMirrorBypassSupportGatePatch = bytecodePatch(
     execute {
         val method = webViewPageFinishedFingerprint.method
         val insertIndex = method.implementation!!.instructions.lastIndex
-        method.addInstruction(
+        method.addInstructions(
             insertIndex,
             """
-                const-string p2, "$SUPPORT_GATE_JS"
+                const-string v0, "$SUPPORT_GATE_JS"
                 const/4 p0, 0x0
-                invoke-virtual { p1, p2, p0 }, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
+                invoke-virtual { p1, v0, p0 }, Landroid/webkit/WebView;->evaluateJavascript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V
             """.trimIndent(),
         )
     }
