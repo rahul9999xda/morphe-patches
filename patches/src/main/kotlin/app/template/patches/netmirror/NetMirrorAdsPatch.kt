@@ -108,21 +108,9 @@ val netMirrorBlockWebResourceRedirectPatch = bytecodePatch(
 @Suppress("unused")
 val netMirrorBypassSupportGatePatch = bytecodePatch(
     name = "NetMirror: Remove support/ad gate",
-    description = "Removes the server-delivered support/ad overlay after a WebView page finishes loading.",
-    default = true,
+    description = "Disabled in diagnostic build because modifying onPageFinished can destabilize WebView startup.",
+    default = false,
 ) {
     compatibleWith(NETMIRROR_COMPATIBILITY)
-    execute {
-        try {
-            webViewPageFinishedFingerprint.method.addInstructions(
-                0,
-                """
-                    const-string v0, "javascript:(function(){try{function c(){var a=document.querySelectorAll('body *');for(var i=0;i<a.length;i++){var e=a[i],t=(e.innerText||'').trim();if(t.indexOf('We Need Support')!==-1||t.indexOf('Open 1 ADS per Day')!==-1){for(var j=0;j<6&&e.parentElement;j++){var r=getComputedStyle(e);if(r.position==='fixed'||r.position==='absolute'||parseInt(r.zIndex||'0')>100)e=e.parentElement;else break;}e.style.display='none';e.remove();}}document.documentElement.style.overflow='auto';if(document.body)document.body.style.overflow='auto';}c();new MutationObserver(c).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}})();"
-                    invoke-virtual {p1, v0}, Landroid/webkit/WebView;->loadUrl(Ljava/lang/String;)V
-                """.trimIndent(),
-            )
-        } catch (e: PatchException) {
-            println("[NetMirror: Remove support/ad gate] fingerprint not applied: ${e.message}")
-        }
-    }
+    execute { }
 }
