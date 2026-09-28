@@ -769,6 +769,48 @@ val AnalyticsTrackEventMapFingerprint = Fingerprint(
     parameters = listOf("Ljava/lang/String;", "Ljava/util/HashMap;"),
 )
 
+// ─── Disable message auto-delete ──────────────────────────────────────────────
+//
+// DEX-verified target workers:
+// Telegram / Telegram Web 12.10.5: MessagesController.lambda$checkDeletingTask$86(Lz/f;, Lz/f;)V
+// Plus Messenger 12.10.3.0: MessagesController.e2(MessagesController, androidx.collection.h, androidx.collection.h)V
+// Keep these separate because the synthetic worker names and parameter types differ.
+// The deleteMessages() call is the behavioral anchor for the regular-message expiry path.
+val MessagesControllerAutoDeleteTaskTelegramWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}checkDeletingTask${'$'}86",
+    returnType = "V",
+    parameters = listOf(
+        "Lz/f;",
+        "Lz/f;",
+    ),
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/MessagesController;",
+            name = "deleteMessages",
+            returnType = "V",
+        ),
+    ),
+)
+
+val MessagesControllerAutoDeleteTaskPlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "e2",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/messenger/MessagesController;",
+        "Landroidx/collection/h;",
+        "Landroidx/collection/h;",
+    ),
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/MessagesController;",
+            name = "deleteMessages",
+            returnType = "V",
+        ),
+    ),
+)
+
 // ─── Rich HTML paste ──────────────────────────────────────────────────────────
 val ChatActivityEnterViewHandleRichHtmlPasteFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
