@@ -3,7 +3,6 @@ package app.template.patches.telegram.content
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.patcher.mutableClassDefBy
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
@@ -64,9 +63,11 @@ val telegramDisableAutoDeleteMessagesUnifiedPatch = bytecodePatch(
         // three code units. Preserve method layout with three NOPs.
         local.method.replaceInstruction(
             local.instructionMatches.single().index,
-            "nop
-nop
-nop",
+            """
+            nop
+            nop
+            nop
+            """.trimIndent(),
         )
 
         // ---------------------------------------------------------------
