@@ -64,9 +64,9 @@ val telegramDisableAutoDeleteMessagesUnifiedPatch = bytecodePatch(
         local.method.replaceInstruction(
             local.instructionMatches.single().index,
             """
-            nop
-            nop
-            nop
+                nop
+                nop
+                nop
             """.trimIndent(),
         )
 
@@ -131,8 +131,8 @@ val telegramDisableAutoDeleteMessagesUnifiedPatch = bytecodePatch(
                 # p1:p2 = dialogId
                 # p3 = server deletion IDs
                 # v0 = Iterator
-                # v1 = ConnectionsManager
-                # v2 = current server time
+                # v1 = spare local
+                # v2 = current epoch time in seconds
                 # v3 = hasNext / temporary int
                 # v4 = Integer / Message
                 # v5:v6 = message id / ttl arithmetic
@@ -141,10 +141,13 @@ val telegramDisableAutoDeleteMessagesUnifiedPatch = bytecodePatch(
                 invoke-virtual { p3 }, Ljava/util/ArrayList;->iterator()Ljava/util/Iterator;
                 move-result-object v0
 
-                invoke-virtual { p0 }, Lorg/telegram/messenger/BaseController;->getConnectionsManager()Lorg/telegram/tgnet/ConnectionsManager;
-                move-result-object v1
-                invoke-virtual { v1 }, Lorg/telegram/tgnet/ConnectionsManager;->getCurrentTime()I
-                move-result v2
+                # Use epoch seconds from the system clock. p0 is MessagesStorage,
+                # not a BaseController, so it must not call getConnectionsManager().
+                invoke-static {}, Ljava/lang/System;->currentTimeMillis()J
+                move-result-wide v2
+                const-wide/16 v5, 0x3e8
+                div-long/2addr v2, v5
+                long-to-int v2, v2
 
                 :ttl_filter_loop
                 invoke-interface { v0 }, Ljava/util/Iterator;->hasNext()Z
