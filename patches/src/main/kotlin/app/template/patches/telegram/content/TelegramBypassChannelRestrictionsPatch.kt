@@ -210,7 +210,21 @@ private val checkCanOpenChat4NormalFingerprint = Fingerprint(
     ),
 )
 
+// Plus Messenger 12.10.6.0 changed the final callback descriptor from
+// Lej/e$c; to Ldj/e$c;. Keep the old descriptor as a compatibility fallback.
 private val checkCanOpenChat4PlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Ldj/e${'$'}c;",
+    ),
+)
+
+private val checkCanOpenChat4PlusLegacyFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkCanOpenChat",
     returnType = "Z",
@@ -324,6 +338,7 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 checkCanOpenChat4WebFingerprint,
                 checkCanOpenChat4NormalFingerprint,
                 checkCanOpenChat4PlusFingerprint,
+                checkCanOpenChat4PlusLegacyFingerprint,
                 methodName = "checkCanOpenChat/4",
             ),
         ).forEach { method ->

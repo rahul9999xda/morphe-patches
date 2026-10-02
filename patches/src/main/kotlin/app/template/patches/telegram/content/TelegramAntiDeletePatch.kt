@@ -46,8 +46,9 @@ private val deletedMessageUiFingerprint = Fingerprint(
 
 /*
  * The first parameter is build-specific:
- *   Normal Telegram 12.10.5 / Telegram Web 12.10.5 -> Lz/f;
- *   Telegram Plus 12.10.3.0 -> Landroidx/collection/h;
+ *   Telegram / Telegram Web 12.10.6 -> Lz/f;
+ *   Telegram Plus 12.10.6.0 -> Landroidx/collection/k;
+ *   older supported Plus builds may use Landroidx/collection/h;.
  *
  * Resolve the exact known variant at patch time rather than using a stale
  * LongSparseArray descriptor or silently skipping the notification hook.
@@ -63,6 +64,17 @@ private val removeDeletedMessagesFromNotificationsNormalWebFingerprint = Fingerp
 )
 
 private val removeDeletedMessagesFromNotificationsPlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/NotificationsController;",
+    name = "removeDeletedMessagesFromNotifications",
+    returnType = "V",
+    parameters = listOf(
+        "Landroidx/collection/k;",
+        "Z",
+    ),
+)
+
+// Backward-compatible descriptor retained for earlier Plus releases.
+private val removeDeletedMessagesFromNotificationsPlusLegacyFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/NotificationsController;",
     name = "removeDeletedMessagesFromNotifications",
     returnType = "V",
@@ -118,6 +130,7 @@ val telegramAntiDeletePatch = bytecodePatch(
         val removeDeletedMessagesMethod =
             removeDeletedMessagesFromNotificationsNormalWebFingerprint.methodOrNull
                 ?: removeDeletedMessagesFromNotificationsPlusFingerprint.methodOrNull
+                ?: removeDeletedMessagesFromNotificationsPlusLegacyFingerprint.methodOrNull
 
         requireNotNull(removeDeletedMessagesMethod) {
             "Failed to match removeDeletedMessagesFromNotifications for Telegram/Web/Plus"

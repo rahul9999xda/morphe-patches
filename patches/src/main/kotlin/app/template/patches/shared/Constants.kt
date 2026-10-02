@@ -1557,7 +1557,7 @@ val TELEGRAM_COMPATIBILITY = Compatibility(
         packageName = "org.telegram.messenger",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "12.10.4", versionCode = 70992))
+        targets = listOf(AppTarget(version = "12.10.6", versionCode = 71122))
     )
 
 val TELEGRAM_PLUS_COMPATIBILITY = Compatibility(
@@ -1565,7 +1565,7 @@ val TELEGRAM_PLUS_COMPATIBILITY = Compatibility(
         packageName = "org.telegram.plus",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "12.10.3.0", versionCode = 22551))
+        targets = listOf(AppTarget(version = "12.10.6.0", versionCode = 22588))
     )
 
 val TELEGRAM_WEB_COMPATIBILITY = Compatibility(
@@ -1573,7 +1573,7 @@ val TELEGRAM_WEB_COMPATIBILITY = Compatibility(
         packageName = "org.telegram.messenger.web",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "12.10.4", versionCode = 70999))
+        targets = listOf(AppTarget(version = "12.10.6", versionCode = 71129))
     )
 
 val THE_ATHLETIC_COMPATIBILITY = Compatibility(

@@ -11,7 +11,7 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 // ════════════════════════════════════════════════════════════════════════════════
 // Telegram shared fingerprints
-// Verified against: Telegram Web 12.9.2 (69919), TelegramPlus 12.9.0.1 (22437)
+// Updated using DEX method-signature audit: Telegram 12.10.6 (71122), Telegram Web 12.10.6 (71129), Plus Messenger 12.10.6.0 (22588)
 // All class names non-obfuscated — stable across Telegram forks.
 // AccessFlags omitted where Web/Plus differ (e.g. protected vs public).
 // ════════════════════════════════════════════════════════════════════════════════
@@ -318,6 +318,56 @@ val CheckCanOpenChat4Fingerprint = Fingerprint(
     ),
 )
 
+// Current 12.10.6 four-argument overloads; callback descriptors differ by fork.
+val CheckCanOpenChat4NormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/r2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Lee/f;",
+    ),
+)
+
+val CheckCanOpenChat4WebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/s2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Lhe/e;",
+    ),
+)
+
+val CheckCanOpenChat4PlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Ldj/e\$c;",
+    ),
+)
+
+// Legacy Plus descriptor retained for older Plus builds only.
+val CheckCanOpenChat4PlusLegacyFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;",
+        "Lorg/telegram/ui/ActionBar/i2;",
+        "Lorg/telegram/messenger/MessageObject;",
+        "Lej/e\$c;",
+    ),
+)
+
 // ─── Anti-delete ──────────────────────────────────────────────────────────────
 
 val MarkMessagesAsDeletedFingerprint1 = Fingerprint(
@@ -342,11 +392,28 @@ val DeleteMessagesByPushFingerprint = Fingerprint(
     parameters = listOf("J", "Ljava/util/ArrayList;", "J"),
 )
 
+// Telegram standard and Telegram Web 12.10.6 use Lz/f;.
 val NotificationsControllerRemoveDeletedMessagesFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/NotificationsController;",
     name = "removeDeletedMessagesFromNotifications",
     returnType = "V",
-    parameters = listOf("Landroidx/collection/LongSparseArray;", "Z"),
+    parameters = listOf("Lz/f;", "Z"),
+)
+
+// Plus Messenger 12.10.6.0 current descriptor.
+val NotificationsControllerRemoveDeletedMessagesPlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/NotificationsController;",
+    name = "removeDeletedMessagesFromNotifications",
+    returnType = "V",
+    parameters = listOf("Landroidx/collection/k;", "Z"),
+)
+
+// Backward-compatible fallback for older Plus builds.
+val NotificationsControllerRemoveDeletedMessagesPlusLegacyFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/NotificationsController;",
+    name = "removeDeletedMessagesFromNotifications",
+    returnType = "V",
+    parameters = listOf("Landroidx/collection/h;", "Z"),
 )
 
 // ─── Anti-disappearing media ──────────────────────────────────────────────────
@@ -770,45 +837,135 @@ val AnalyticsTrackEventMapFingerprint = Fingerprint(
 )
 
 // ─── Disable message auto-delete ──────────────────────────────────────────────
-//
-// DEX-verified target workers:
-// Telegram / Telegram Web 12.10.5: MessagesController.lambda$checkDeletingTask$86(Lz/f;, Lz/f;)V
-// Plus Messenger 12.10.3.0: MessagesController.e2(MessagesController, androidx.collection.h, androidx.collection.h)V
-// Keep these separate because the synthetic worker names and parameter types differ.
-// The deleteMessages() call is the behavioral anchor for the regular-message expiry path.
+/**
+ * Telegram 12.10.6 unified Auto-Delete fingerprints.
+ *
+ * Audited APKs:
+ * - Telegram 12.10.6 / 71122
+ * - Telegram Web 12.10.6 / 71129
+ * - Plus Messenger 12.10.6.0 / 22588
+ *
+ * The normal Telegram/Web builds retain the readable synthetic lambda names.
+ * Plus is obfuscated and therefore uses separate exact method-name/signature
+ * fingerprints. The sink shape is nevertheless identical: one
+ * MessagesStorage.markMessagesAsDeleted(...) call in each server-delete
+ * lambda.
+ */
+
+private val deleteMessagesCall = methodCall(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "deleteMessages",
+    returnType = "V",
+)
+
+val MessagesControllerAutoDeleteTaskTelegramFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}checkDeletingTask${'$'}86",
+    returnType = "V",
+    parameters = listOf("Lz/f;", "Lz/f;"),
+    filters = listOf(deleteMessagesCall),
+)
+
 val MessagesControllerAutoDeleteTaskTelegramWebFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "lambda${'$'}checkDeletingTask${'$'}86",
     returnType = "V",
-    parameters = listOf(
-        "Lz/f;",
-        "Lz/f;",
-    ),
-    filters = listOf(
-        methodCall(
-            definingClass = "Lorg/telegram/messenger/MessagesController;",
-            name = "deleteMessages",
-            returnType = "V",
-        ),
-    ),
+    parameters = listOf("Lz/f;", "Lz/f;"),
+    filters = listOf(deleteMessagesCall),
 )
 
+/** Plus 12.10.6.0 / 22588 local TTL worker. */
 val MessagesControllerAutoDeleteTaskPlusFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
-    name = "e2",
+    name = "f2",
     returnType = "V",
     parameters = listOf(
         "Lorg/telegram/messenger/MessagesController;",
-        "Landroidx/collection/h;",
-        "Landroidx/collection/h;",
+        "Landroidx/collection/k;",
+        "Landroidx/collection/k;",
     ),
-    filters = listOf(
-        methodCall(
-            definingClass = "Lorg/telegram/messenger/MessagesController;",
-            name = "deleteMessages",
-            returnType = "V",
-        ),
+    filters = listOf(deleteMessagesCall),
+)
+
+val MessagesControllerAutoDeleteTaskFingerprints = listOf(
+    MessagesControllerAutoDeleteTaskTelegramWebFingerprint,
+    MessagesControllerAutoDeleteTaskPlusFingerprint,
+)
+
+private val markMessagesAsDeletedCall = methodCall(
+    definingClass = "Lorg/telegram/messenger/MessagesStorage;",
+    name = "markMessagesAsDeleted",
+    returnType = "Ljava/util/ArrayList;",
+)
+
+val MessagesControllerServerTtlRegularDeleteTelegramFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}processUpdateArray${'$'}418",
+    returnType = "V",
+    parameters = listOf("J", "Ljava/util/ArrayList;"),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+val MessagesControllerServerTtlChannelDeleteTelegramFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}processUpdateArray${'$'}419",
+    returnType = "V",
+    parameters = listOf("J", "Ljava/util/ArrayList;", "J"),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+// Web uses the same synthetic names/signatures as Telegram 12.10.6.
+val MessagesControllerServerTtlRegularDeleteWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}processUpdateArray${'$'}418",
+    returnType = "V",
+    parameters = listOf("J", "Ljava/util/ArrayList;"),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+val MessagesControllerServerTtlChannelDeleteWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}processUpdateArray${'$'}419",
+    returnType = "V",
+    parameters = listOf("J", "Ljava/util/ArrayList;", "J"),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+// Plus 12.10.6.0 / 22588 obfuscates these lambdas and captures the controller
+// as the first static-lambda parameter.
+val MessagesControllerServerTtlRegularDeletePlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "M1",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/messenger/MessagesController;",
+        "J",
+        "Ljava/util/ArrayList;",
     ),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+val MessagesControllerServerTtlChannelDeletePlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "J8",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/messenger/MessagesController;",
+        "J",
+        "Ljava/util/ArrayList;",
+        "J",
+    ),
+    filters = listOf(markMessagesAsDeletedCall),
+)
+
+val MessagesControllerServerTtlRegularDeleteFingerprints = listOf(
+    MessagesControllerServerTtlRegularDeleteTelegramFingerprint,
+    MessagesControllerServerTtlRegularDeletePlusFingerprint,
+)
+
+val MessagesControllerServerTtlChannelDeleteFingerprints = listOf(
+    MessagesControllerServerTtlChannelDeleteTelegramFingerprint,
+    MessagesControllerServerTtlChannelDeletePlusFingerprint,
 )
 
 // ─── Rich HTML paste ──────────────────────────────────────────────────────────
