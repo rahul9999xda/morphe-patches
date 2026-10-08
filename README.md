@@ -47,7 +47,7 @@ Releases and test builds are produced through the repository's configured build 
 <!-- PATCHES_START -->
 ## 🩹 Patches list
 
-> [v1.0.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.0.0) · `main` · **14 patches total**
+> [v1.1.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.1.0) · `main` · **14 patches total**
 
 
 <details>
