@@ -154,7 +154,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add gradle.properties
+          # Morphe Manager reads patches-bundle.json from the branch (main = stable,
+          # dev = pre-release) to find the latest .mpp download URL.
+          jq -n \
+            --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%S)" \
+            --rawfile description RELEASE_NOTES.md \
+            --arg download_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/patches-${VERSION}.mpp" \
+            --arg version "${VERSION}" \
+            '{created_at: $created_at, description: $description, download_url: $download_url, signature_download_url: "", version: $version}' \
+            > patches-bundle.json
+
+          git add gradle.properties patches-bundle.json
 
           if [ "${RELEASE_KIND}" = "stable" ]; then
             git add README.md patches-list.json
