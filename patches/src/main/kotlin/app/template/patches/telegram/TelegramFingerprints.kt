@@ -295,9 +295,9 @@ val CheckCanOpenChat4NormalFingerprint = Fingerprint(
     returnType = "Z",
     parameters = listOf(
         "Landroid/os/Bundle;",
-        "Lorg/telegram/ui/ActionBar/r2;",
+        "Lorg/telegram/ui/ActionBar/s2;",
         "Lorg/telegram/messenger/MessageObject;",
-        "Lee/f;",
+        "Lfe/e;",
     ),
 )
 
@@ -309,7 +309,7 @@ val CheckCanOpenChat4WebFingerprint = Fingerprint(
         "Landroid/os/Bundle;",
         "Lorg/telegram/ui/ActionBar/s2;",
         "Lorg/telegram/messenger/MessageObject;",
-        "Lhe/e;",
+        "Lie/e;",
     ),
 )
 
