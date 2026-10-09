@@ -5,7 +5,6 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
-import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 /** Verified against clean Truecaller 26.39.6 / build 2639006. */
 internal val UpdateTriggerEntryFingerprint = Fingerprint(
@@ -22,11 +21,11 @@ internal val UpdateTriggerEntryFingerprint = Fingerprint(
             val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
             reference?.definingClass == "Ljvb;" && reference.name == "k"
         }
-        val hasFutureCall = instructions.any { instruction ->
+        val hasCoroutineResultConstructor = instructions.any { instruction ->
             val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
-            reference?.definingClass == "Ljava/util/concurrent/CompletableFuture;"
+            reference?.definingClass == "Lzll;" && reference.name == "<init>"
         }
-        hasCoroutineCall && hasFutureCall
+        hasCoroutineCall && hasCoroutineResultConstructor
     },
 )
 

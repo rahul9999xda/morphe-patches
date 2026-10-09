@@ -4,6 +4,7 @@ import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+import com.android.tools.smali.dexlib2.Opcode
 
 /** Verified against clean Truecaller 26.39.6 / build 2639006. */
 internal val ScamFeedFeatureGateFingerprint = Fingerprint(
@@ -34,26 +35,32 @@ internal val BottomBarRebuildFingerprint = Fingerprint(
     },
 )
 
-
-/** Fingerprint for the Get Premium row on Settings > Blocking. */
+/**
+ * The Get Premium settings row is a dedicated Lt77 view obtained from
+ * BlockSettingsFragment.I and wired by bd6.invoke() in build 2639006.
+ */
 internal val HidePremiumSettingsRowFingerprint = Fingerprint(
-    definingClass = "Lcom/truecaller/settings/impl/ui/block/BlockSettingsFragment;",
-    name = "onResume",
-    returnType = "V",
+    definingClass = "Lbd6;",
+    name = "invoke",
+    returnType = "Ljava/lang/Object;",
     parameters = emptyList(),
     custom = { method, _ ->
         val instructions = method.implementation?.instructions ?: emptyList()
-        val hasPremiumRowField = instructions.any { instruction ->
+        val hasGetPremiumLazy = instructions.any { instruction ->
             val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
             reference?.definingClass == "Lcom/truecaller/settings/impl/ui/block/BlockSettingsFragment;" &&
                 reference.name == "I" && reference.type == "Lkotlin/Lazy;"
         }
-        val hasPremiumRowListener = instructions.any { instruction ->
+        val hasGetPremiumViewCast = instructions.any { instruction ->
+            instruction.opcode == Opcode.CHECK_CAST &&
+                ((instruction as? ReferenceInstruction)?.reference as? com.android.tools.smali.dexlib2.iface.reference.TypeReference)?.type == "Lt77;"
+        }
+        val hasClickListenerConstructor = instructions.any { instruction ->
             val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
             reference?.definingClass == "Lcd6;" && reference.name == "<init>" &&
                 reference.parameterTypes.map { it.toString() } ==
-                    listOf("Lcom/truecaller/settings/impl/ui/block/BlockSettingsFragment;", "B")
+                listOf("Lcom/truecaller/settings/impl/ui/block/BlockSettingsFragment;", "B")
         }
-        hasPremiumRowField && hasPremiumRowListener
+        hasGetPremiumLazy && hasGetPremiumViewCast && hasClickListenerConstructor
     },
 )
