@@ -1,6 +1,11 @@
 package app.template.patches.truecaller.misc
 
 import app.morphe.patcher.Fingerprint
+import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 /** Verified against clean Truecaller 26.39.6 / build 2639006. */
 internal val UpdateTriggerEntryFingerprint = Fingerprint(
@@ -12,9 +17,16 @@ internal val UpdateTriggerEntryFingerprint = Fingerprint(
         "Lcom/truecaller/inappupdate/UpdateTrigger;",
     ),
     custom = { method, _ ->
-        val text = method.implementation?.instructions?.joinToString("\n") ?: ""
-        text.contains("Ljvb;->k") &&
-            text.contains("Ljava/util/concurrent/CompletableFuture;")
+        val instructions = method.implementation?.instructions ?: emptyList()
+        val hasCoroutineCall = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Ljvb;" && reference.name == "k"
+        }
+        val hasFutureCall = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Ljava/util/concurrent/CompletableFuture;"
+        }
+        hasCoroutineCall && hasFutureCall
     },
 )
 
@@ -25,8 +37,16 @@ internal val OtpSelectorFingerprint = Fingerprint(
     parameters = emptyList(),
     strings = listOf("verificationOtpSmsApi_19731"),
     custom = { method, _ ->
-        val text = method.implementation?.instructions?.joinToString("\n") ?: ""
-        text.contains("OtpSmsApi;->SMS") && text.contains("OtpSmsApi;->GOOGLE")
+        val instructions = method.implementation?.instructions ?: emptyList()
+        val hasSms = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lcom/truecaller/wizard/verification/otp/sms/OtpSmsApi;" && reference.name == "SMS"
+        }
+        val hasGoogle = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lcom/truecaller/wizard/verification/otp/sms/OtpSmsApi;" && reference.name == "GOOGLE"
+        }
+        hasSms && hasGoogle
     },
 )
 
@@ -37,7 +57,12 @@ internal val TelemetryEnableTrackingFingerprint = Fingerprint(
     returnType = "V",
     parameters = emptyList(),
     custom = { method, _ ->
-        val text = method.implementation?.instructions?.joinToString("\n") ?: ""
-        text.contains("AppStartTracker;->isEnabled:Z") && text.contains("sput-boolean")
+        val instructions = method.implementation?.instructions ?: emptyList()
+        val hasEnabledField = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lcom/truecaller/analytics/technical/AppStartTracker;" && reference.name == "isEnabled" && reference.type == "Z"
+        }
+        val hasSputBoolean = instructions.any { instruction -> instruction.opcode == Opcode.SPUT_BOOLEAN }
+        hasEnabledField && hasSputBoolean
     },
 )

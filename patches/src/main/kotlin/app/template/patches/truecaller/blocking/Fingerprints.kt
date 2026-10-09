@@ -1,6 +1,9 @@
 package app.template.patches.truecaller.blocking
 
 import app.morphe.patcher.Fingerprint
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 /** Verified against clean Truecaller 26.39.6 / build 2639006. */
 internal val TopSpammersFilterFingerprint = Fingerprint(
@@ -44,10 +47,20 @@ internal val VerifiedBusinessFilterFingerprint = Fingerprint(
         "Lkotlin/Lazy;",
     ),
     custom = { method, _ ->
-        val text = method.implementation?.instructions?.joinToString("\n") ?: ""
-        text.contains("filter_filteringVerifiedBusinesses") &&
-            text.contains("Contact;->u0") &&
-            text.contains("FilterMatch;->t")
+        val instructions = method.implementation?.instructions ?: emptyList()
+        val hasPreferenceKey = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? com.android.tools.smali.dexlib2.iface.reference.StringReference
+            reference?.string == "filter_filteringVerifiedBusinesses"
+        }
+        val hasContactGate = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Lcom/truecaller/data/entity/Contact;" && reference.name == "u0"
+        }
+        val hasVerifiedResult = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lcom/truecaller/blocking/FilterMatch;" && reference.name == "t"
+        }
+        hasPreferenceKey && hasContactGate && hasVerifiedResult
     },
 )
 
@@ -58,9 +71,21 @@ internal val NumberSeriesFilterEntryFingerprint = Fingerprint(
     returnType = "Lcom/truecaller/blocking/FilterMatch;",
     parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;", "Z"),
     custom = { method, _ ->
-        val text = method.implementation?.instructions?.joinToString("\n") ?: ""
-        text.contains("FilterMatch;->s") &&
-            text.contains("Lgqj;->w") &&
-            text.contains("Lgqj;->F")
+        val instructions = method.implementation?.instructions ?: emptyList()
+        val hasNumberSeriesSentinel = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lcom/truecaller/blocking/FilterMatch;" &&
+                reference.name == "s" &&
+                reference.type == "Lcom/truecaller/blocking/FilterMatch;"
+        }
+        val hasWCall = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Lgqj;" && reference.name == "w"
+        }
+        val hasFCall = instructions.any { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Lgqj;" && reference.name == "F"
+        }
+        hasNumberSeriesSentinel && hasWCall && hasFCall
     },
 )

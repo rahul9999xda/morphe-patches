@@ -3,6 +3,8 @@ package app.template.patches.truecaller.blocking
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TRUECALLER_COMPATIBILITY
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 /**
  * Enables the existing verified-business branch inside the current filter
@@ -15,10 +17,12 @@ val blockVerifiedBusinessesPatch = bytecodePatch(
     compatibleWith(TRUECALLER_COMPATIBILITY)
     execute {
         val method = VerifiedBusinessFilterFingerprint.method
-        val index = method.implementation?.instructions?.indexOfFirst {
-            it.toString().contains("SharedPreferences;->getBoolean") &&
-                it.toString().contains("getBoolean")
-        } ?: -1
+        val instructions = method.implementation?.instructions
+            ?: error("Verified-business filter has no implementation")
+        val index = instructions.indexOfFirst { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            reference?.definingClass == "Landroid/content/SharedPreferences;" && reference.name == "getBoolean"
+        }
         check(index >= 0) { "Verified-business SharedPreferences read not found" }
         method.addInstructions(index + 2, "const/4 p2, 0x1")
     }

@@ -3,6 +3,8 @@ package app.template.patches.truecaller.blocking
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TRUECALLER_COMPATIBILITY
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 
 /**
  * Uses Truecaller's existing NUMBER_SERIES FilterMatch sentinel. The check is
@@ -16,10 +18,15 @@ val block140160TelemarketersPatch = bytecodePatch(
     compatibleWith(TRUECALLER_COMPATIBILITY)
     execute {
         val method = NumberSeriesFilterEntryFingerprint.method
-        val anchor = method.implementation?.instructions?.indexOfFirst {
-            it.toString().contains("Lgqj;->g:Lzk10;")
-        } ?: -1
-        check(anchor >= 0) { "Call-filter normalization anchor not found" }
+        val instructions = method.implementation?.instructions
+            ?: error("Number-series filter has no implementation")
+        val anchor = instructions.indexOfFirst { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            reference?.definingClass == "Lgqj;" &&
+                reference.name == "g" &&
+                reference.type == "Lzk10;"
+        }
+        check(anchor >= 0) { "Call-filter database field anchor not found in Lgqj.a(String,String,boolean)" }
         method.addInstructions(anchor, """
             const-string v0, "140"
             invoke-virtual {v1, v0}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
