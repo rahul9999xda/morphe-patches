@@ -3,12 +3,8 @@ package app.template.patches.shared
 import app.morphe.patcher.patch.ApkFileType
 import app.morphe.patcher.patch.AppTarget
 import app.morphe.patcher.patch.Compatibility
+import app.morphe.patcher.patch.SupportedAbi
 
-/**
- * Telegram-only compatibility definitions for this personal/testing repository.
- *
- * Targets are kept aligned with the current Telegram patch set.
- */
 object Constants {
     val TELEGRAM_COMPATIBILITY = Compatibility(
         name = "Telegram",
@@ -32,5 +28,12 @@ object Constants {
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
         targets = listOf(AppTarget(version = "12.10.6", versionCode = 71129))
+    )
+
+    val TRUECALLER_COMPATIBILITY = Compatibility(
+        name = "Truecaller",
+        packageName = "com.truecaller",
+        apkFileType = ApkFileType.APKM,
+        targets = listOf(AppTarget(version = "26.39.6", versionCode = 2639006))
     )
 }
