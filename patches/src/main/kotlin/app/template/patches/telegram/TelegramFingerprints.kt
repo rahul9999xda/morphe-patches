@@ -12,13 +12,11 @@ import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 // ════════════════════════════════════════════════════════════════════════════════
 // Telegram shared fingerprints
-// Instruction-level audit baseline: Telegram 12.10.6 (71122), Telegram Web 12.10.6 (71129),
-// Plus Messenger 12.10.6.0 (22588). The named Telegram/Web core classes are present in those
-// DEX sets; the supplied Plus APK has several referenced core types but no local class definitions
-// for MessagesController, UserConfig, SharedConfig, MessageObject, MessagesStorage, or FileLoadOperation.
-// A referenced descriptor is NOT proof that the class body can be patched in that APK.
-// Fork-specific UI/story targets remain legacy declarations unless their method bodies are mapped.
-// AccessFlags are omitted where Web/Plus differ (e.g. protected vs public).
+// Audit baseline: Telegram 13.0.0 build 71581 and Telegram Web 13.0.0 build 71589.
+// Plus-specific declarations remain legacy compatibility candidates from earlier Plus builds;
+// no Plus 13.0.0 APK was supplied for this audit. A referenced descriptor is NOT proof that
+// a class body can be patched in that APK. Fork-specific UI/story targets remain candidates
+// unless their method bodies are mapped. AccessFlags are omitted where variants differ.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── Premium ──────────────────────────────────────────────────────────────────
@@ -287,8 +285,8 @@ val SetContentSettingsFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-// Telegram/Web 12.10.6 four-argument overloads; Plus descriptor is only a reference-level candidate
-// in the supplied APK because the MessagesController method body is not locally declared.
+// Telegram 13.0.0 / Web 13.0.0 four-argument overloads, confirmed from the supplied clean DEX.
+// Plus descriptor remains a legacy candidate and was not re-audited against a current Plus APK.
 val CheckCanOpenChat4NormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "checkCanOpenChat",
