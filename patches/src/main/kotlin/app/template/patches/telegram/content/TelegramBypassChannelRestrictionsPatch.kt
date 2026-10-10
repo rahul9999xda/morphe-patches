@@ -65,7 +65,7 @@ private val showCantOpenAlertNormalFingerprint = Fingerprint(
     name = "showCantOpenAlert",
     returnType = "V",
     parameters = listOf(
-        "Lorg/telegram/ui/ActionBar/r2;",
+        "Lorg/telegram/ui/ActionBar/s2;",
         "Ljava/lang/String;",
     ),
 )
@@ -104,7 +104,7 @@ private val checkSensitiveNormalFingerprint = Fingerprint(
     name = "checkSensitive",
     returnType = "V",
     parameters = listOf(
-        "Lorg/telegram/ui/ActionBar/r2;",
+        "Lorg/telegram/ui/ActionBar/s2;",
         "J",
         "Ljava/lang/Runnable;",
         "Ljava/lang/Runnable;",
