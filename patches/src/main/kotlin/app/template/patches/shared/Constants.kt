@@ -23,7 +23,7 @@ object Constants {
         packageName = "org.telegram.plus",
         apkFileType = ApkFileType.XAPK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "12.10.6.0", versionCode = 22588))
+        targets = listOf(AppTarget(version = "13.0.2.0", versionCode = 22598))
     )
 
     val TELEGRAM_WEB_COMPATIBILITY = Compatibility(
