@@ -68,69 +68,60 @@ jobs:
           set -euo pipefail
           git fetch --force --tags origin
 
-          LATEST_STABLE_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
-          if [ -z "$LATEST_STABLE_TAG" ]; then
-            BASE_VERSION="1.0.0"
-            PREVIOUS_TAG=""
-          else
-            BASE_VERSION="${LATEST_STABLE_TAG#v}"
-            PREVIOUS_TAG="$LATEST_STABLE_TAG"
-          fi
-
-          # Match Morphe's Conventional Commit release rules: feat -> minor;
-          # fix/perf/bump -> patch; breaking changes -> major. Dev releases use
-          # the next stable version with semantic-release-style -dev.N suffix.
-          if [ -n "$PREVIOUS_TAG" ]; then
-            RANGE="${PREVIOUS_TAG}..HEAD"
-          else
-            RANGE="HEAD"
-          fi
-          COMMITS="$(git log --format='%s%n%b' $RANGE)"
-          LEVEL=0
-          if printf '%s\n' "$COMMITS" | grep -Eq '(^|[[:space:]])BREAKING CHANGE:|^[a-zA-Z]+(\([^)]*\))?!:'; then LEVEL=3; fi
-          if [ "$LEVEL" -lt 3 ] && printf '%s\n' "$COMMITS" | grep -Eq '^feat(\([^)]*\))?:'; then LEVEL=2; fi
-          if [ "$LEVEL" -lt 2 ] && printf '%s\n' "$COMMITS" | grep -Eq '^(fix|perf|bump)(\([^)]*\))?:|^build\(Needs bump\):'; then LEVEL=1; fi
-
-          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-          if [ "$LEVEL" -eq 3 ]; then MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-          elif [ "$LEVEL" -eq 2 ]; then MINOR=$((MINOR + 1)); PATCH=0
-          elif [ "$LEVEL" -eq 1 ]; then PATCH=$((PATCH + 1))
-          else
-            echo "No release-triggering Conventional Commits found since ${PREVIOUS_TAG:-repository start}."
-            echo "Use fix:, feat:, perf:, bump:, or a breaking-change commit to publish a release."
-            exit 1
-          fi
-          NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
           if [ "$RELEASE_BRANCH" = "main" ]; then
-            VERSION="$NEXT_VERSION"
+            LATEST_STABLE_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
+
+            if [ -z "$LATEST_STABLE_TAG" ]; then
+              VERSION="1.0.0"
+              PREVIOUS_TAG=""
+            else
+              STABLE_VERSION="${LATEST_STABLE_TAG#v}"
+              IFS=. read -r MAJOR MINOR PATCH <<< "$STABLE_VERSION"
+              VERSION="${MAJOR}.$((MINOR + 1)).0"
+              PREVIOUS_TAG="$LATEST_STABLE_TAG"
+            fi
+
             RELEASE_KIND="stable"
-            PREVIOUS_TAG="${LATEST_STABLE_TAG}"
           else
+            LATEST_STABLE_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
+
             if [ -z "$LATEST_STABLE_TAG" ]; then
               echo "No stable release exists yet. Create the first main release before releasing dev."
               exit 1
             fi
-            DEV_BASE="$NEXT_VERSION"
-            LAST_DEV_TAG="$(git tag --list "v${DEV_BASE}-dev.*" --sort=-v:refname | grep -E "^v${DEV_BASE}-dev\.[0-9]+$" | head -n1 || true)"
-            if [ -n "$LAST_DEV_TAG" ]; then
-              DEV_NUMBER=$((${LAST_DEV_TAG##*.} + 1))
-              PREVIOUS_TAG="$LAST_DEV_TAG"
-            else
+
+            STABLE_VERSION="${LATEST_STABLE_TAG#v}"
+            IFS=. read -r MAJOR MINOR PATCH <<< "$STABLE_VERSION"
+            DEV_BASE="${MAJOR}.$((MINOR + 1)).0"
+            LAST_DEV_TAG="$(git tag --list "v${DEV_BASE}-dev[0-9]*" --sort=-v:refname | grep -E "^v${DEV_BASE}-dev[0-9]+$" | head -n1 || true)"
+
+            if [ -z "$LAST_DEV_TAG" ]; then
               DEV_NUMBER=1
               PREVIOUS_TAG="$LATEST_STABLE_TAG"
+            else
+              LAST_DEV_NUMBER="${LAST_DEV_TAG##*-dev}"
+              DEV_NUMBER=$((LAST_DEV_NUMBER + 1))
+              PREVIOUS_TAG="$LAST_DEV_TAG"
             fi
-            VERSION="${DEV_BASE}-dev.${DEV_NUMBER}"
+
+            VERSION="${DEV_BASE}-dev${DEV_NUMBER}"
             RELEASE_KIND="dev"
           fi
 
           TAG="v${VERSION}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then echo "Tag $TAG already exists."; exit 1; fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+            exit 1
+          fi
+
           sed -i -E "s/^version = .*/version = ${VERSION}/" gradle.properties
+
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
           echo "PREVIOUS_TAG=${PREVIOUS_TAG}" >> "$GITHUB_ENV"
           echo "RELEASE_KIND=${RELEASE_KIND}" >> "$GITHUB_ENV"
+
           echo "Releasing ${VERSION} from ${RELEASE_BRANCH}; previous release: ${PREVIOUS_TAG:-none}"
 
       - name: Generate release notes
@@ -173,7 +164,7 @@ jobs:
             '{created_at: $created_at, description: $description, download_url: $download_url, signature_download_url: "", version: $version}' \
             > patches-bundle.json
 
-          git add gradle.properties patches-bundle.json CHANGELOG.md
+          git add gradle.properties patches-bundle.json
 
           if [ "${RELEASE_KIND}" = "stable" ]; then
             git add README.md patches-list.json
@@ -237,11 +228,11 @@ jobs:
 
           if [ "$RELEASE_KIND" = "dev" ]; then
             gh release create "${ARGS[@]}" \
-              --title "Release ${VERSION}" \
+              --title "${TAG}" \
               --notes-file RELEASE_NOTES.md \
               --prerelease
           else
             gh release create "${ARGS[@]}" \
-              --title "Release ${VERSION}" \
+              --title "${TAG}" \
               --notes-file RELEASE_NOTES.md
           fi

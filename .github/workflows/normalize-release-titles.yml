@@ -1,0 +1,34 @@
+name: Normalize Existing Release Titles
+
+# One-time migration: make existing GitHub release titles match their tags,
+# as in the upstream Morphe Patches repository (for example, v1.7.0).
+# This preserves release tags, notes, assets, and prerelease status.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    name: Normalize published release titles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Normalize release titles to their tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,name \
+            | jq -r '.[] | [.tagName, .name] | @tsv' \
+            | while IFS=$'\t' read -r tag title; do
+                [ -n "$tag" ] || continue
+                if [ "$title" != "$tag" ]; then
+                  echo "Renaming release title: $title -> $tag"
+                  gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$tag"
+                else
+                  echo "Already normalized: $tag"
+                fi
+              done
