@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
+"""Generate Morphe-style Conventional Commit release notes and CHANGELOG.md entry."""
+import os
 import re
 import subprocess
 import sys
 from collections import OrderedDict
 
 CATEGORIES = OrderedDict([
-    ("✨ New Features", {"feat", "feature", "add", "added"}),
-    ("🐛 Fixes", {"fix", "fixed", "bug", "hotfix"}),
-    ("🚀 Updated App Support", {"bump", "update", "updated", "support", "compat"}),
-    ("🔧 Improvements", {"perf", "improve", "improved", "enhance", "enhanced", "change", "changes"}),
-    ("🏗️ Build / Compatibility", {"build", "ci", "chore", "gradle", "workflow"}),
-    ("📚 Documentation", {"docs", "doc", "readme"}),
-    ("♻️ Refactoring", {"refactor", "cleanup"}),
+    ("🐛 Bug Fixes", {"fix"}),
+    ("✨ New Features", {"feat", "feature"}),
+    ("🚀 Updated App Support", {"bump"}),
+    ("🔧 Improvements", {"perf"}),
+    ("🏗️ Build / Compatibility", {"build"}),
 ])
 
 
@@ -19,73 +19,75 @@ def git(*args):
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
-def conventional_type(subject):
-    m = re.match(r"^([a-zA-Z]+)(?:\([^)]*\))?!?:\s*(.+)$", subject)
-    if m:
-        return m.group(1).lower(), m.group(2).strip()
-    return "", subject.strip()
-
-
 def main():
     if len(sys.argv) != 4:
         raise SystemExit("Usage: generate_release_notes.py VERSION PREVIOUS_TAG OUTPUT")
-
     version, previous, output = sys.argv[1:]
+    repo = os.environ.get("GITHUB_REPOSITORY", "rahul9999xda/morphe-patches")
     if previous:
-        raw = git("log", "--format=%s%x1f%b%x1e", f"{previous}..HEAD")
+        log_range = f"{previous}..HEAD"
+        compare = f"https://github.com/{repo}/compare/{previous}...v{version}"
+        raw = git("log", "--format=%H%x1f%s%x1f%b%x1e", log_range)
     else:
-        raw = git("log", "--format=%s%x1f%b%x1e")
+        compare = f"https://github.com/{repo}/commits/v{version}"
+        raw = git("log", "--format=%H%x1f%s%x1f%b%x1e")
 
-    commits = []
+    buckets = OrderedDict((name, []) for name in CATEGORIES)
+    other = []
     for record in raw.split("\x1e"):
         record = record.strip()
         if not record:
             continue
-        subject, _, body = record.partition("\x1f")
+        parts = record.split("\x1f", 2)
+        if len(parts) < 2:
+            continue
+        sha, subject = parts[0], parts[1]
+        body = parts[2] if len(parts) > 2 else ""
         if re.match(r"^chore:\s*Release\s+v", subject, re.I):
             continue
-        commits.append((subject, body.strip()))
+        match = re.match(r"^([a-zA-Z]+)(?:\(([^)]*)\))?(!)?:\s*(.+)$", subject)
+        if not match:
+            continue
+        typ, scope, breaking, description = match.groups()
+        typ = typ.lower()
+        if breaking or "BREAKING CHANGE:" in body:
+            category = "✨ New Features"
+            description = f"**BREAKING:** {description}"
+        else:
+            category = next((name for name, types in CATEGORIES.items() if typ in types), None)
+        if not category:
+            continue
+        short = sha[:7]
+        scope_text = f"**{scope}:** " if scope else ""
+        item = f"{scope_text}{description} ([{short}](https://github.com/{repo}/commit/{sha}))"
+        (buckets[category] if category in buckets else other).append(item)
 
-    buckets = OrderedDict((name, []) for name in CATEGORIES)
-    buckets["📌 Other Changes"] = []
-
-    for subject, body in commits:
-        typ, text = conventional_type(subject)
-        placed = False
-        for category, types in CATEGORIES.items():
-            if typ in types:
-                buckets[category].append(text or subject)
-                placed = True
-                break
-        if not placed:
-            buckets["📌 Other Changes"].append(text or subject)
-
-    lines = [f"## Release {version}", "", "### Changes / Fixes", ""]
-    if not commits:
-        lines.append("- No code or patch commits were found since the previous release.")
-    else:
-        for category, items in buckets.items():
-            if not items:
-                continue
+    lines = [f"## [{version}]({compare}) ({git('log', '-1', '--format=%cs')})"]
+    any_items = False
+    for category, items in buckets.items():
+        if items:
+            any_items = True
             lines += [f"### {category}", ""]
-            seen = set()
-            for item in items:
-                item = re.sub(r"\s+", " ", item).strip()
-                if not item or item in seen:
-                    continue
-                seen.add(item)
-                lines.append(f"- {item}")
+            lines += [f"* {item}" for item in dict.fromkeys(items)]
             lines.append("")
-
-    lines += ["### Release information", "", f"- **Version:** `{version}`"]
-    if previous:
-        lines.append(f"- **Changes since:** `{previous}`")
-    lines.append("")
-    lines.append("This release was built automatically by the repository release workflow.")
-    lines.append("")
-
+    if other:
+        any_items = True
+        lines += ["### 📌 Other Changes", ""]
+        lines += [f"* {item}" for item in dict.fromkeys(other)]
+        lines.append("")
+    if not any_items:
+        lines += ["### 🔧 Improvements", "", "* Maintenance release.", ""]
+    release_notes = "\n".join(lines).rstrip() + "\n"
     with open(output, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        f.write(release_notes)
+
+    changelog = "CHANGELOG.md"
+    old = ""
+    if os.path.exists(changelog):
+        with open(changelog, encoding="utf-8") as f:
+            old = f.read().strip()
+    with open(changelog, "w", encoding="utf-8") as f:
+        f.write(release_notes + ("\n" + old + "\n" if old else ""))
 
 
 if __name__ == "__main__":
