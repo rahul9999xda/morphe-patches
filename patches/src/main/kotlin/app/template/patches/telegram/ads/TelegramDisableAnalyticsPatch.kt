@@ -18,8 +18,8 @@ import app.template.patches.telegram.TelegramPrivacyFirebaseSetUserPropertyFinge
 import org.w3c.dom.Element
 
 /**
- * Unified privacy patch for Telegram 12.10.6, Telegram Web 12.10.6 and Plus Messenger
- * 12.10.6.0. It disables Firebase Analytics collection/event forwarding and Crashlytics
+ * Unified privacy patch audited against Telegram 13.0.2, Telegram Web 13.0.2 and Plus Messenger
+ * 13.0.2.0. It disables Firebase Analytics collection/event forwarding and Crashlytics
  * collection/log APIs where those SDKs exist. Telegram/Web's App Center logging/start
  * methods are already no-op stubs in the audited APKs; they are kept as defensive hooks.
  *

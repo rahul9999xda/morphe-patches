@@ -12,11 +12,13 @@ import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 // ════════════════════════════════════════════════════════════════════════════════
 // Telegram shared fingerprints
-// Audit baseline: Telegram 13.0.0 build 71581 and Telegram Web 13.0.0 build 71589.
-// Plus-specific declarations remain legacy compatibility candidates from earlier Plus builds;
-// no Plus 13.0.0 APK was supplied for this audit. A referenced descriptor is NOT proof that
-// a class body can be patched in that APK. Fork-specific UI/story targets remain candidates
-// unless their method bodies are mapped. AccessFlags are omitted where variants differ.
+// Fresh instruction-level audit baseline: Telegram 13.0.2 build 71751,
+// Telegram Web 13.0.2 build 71759, and Plus Messenger 13.0.2.0 build 22598.
+// Current targets are distinguished from retained legacy descriptors. A descriptor found only
+// in a reference table is not considered a patchable method unless a local method body exists.
+// Several old UI owners are R8-renamed in these builds; their old named fingerprints stay below
+// for compatibility but must not be treated as current verified targets. AccessFlags are
+// omitted where APK variants differ.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── Premium ──────────────────────────────────────────────────────────────────
@@ -361,7 +363,7 @@ val DeleteMessagesByPushFingerprint = Fingerprint(
     parameters = listOf("J", "Ljava/util/ArrayList;", "J"),
 )
 
-// Telegram standard and Telegram Web 12.10.6 use Lz/f;.
+// Telegram and Telegram Web 13.0.2 declare this method locally with Lz/f;.
 val NotificationsControllerRemoveDeletedMessagesFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/NotificationsController;",
     name = "removeDeletedMessagesFromNotifications",
@@ -369,8 +371,7 @@ val NotificationsControllerRemoveDeletedMessagesFingerprint = Fingerprint(
     parameters = listOf("Lz/f;", "Z"),
 )
 
-// Plus descriptor observed in references, but no local NotificationsController class body was
-// found in the supplied Plus APK. Retained for downstream imports; not a confirmed target.
+// Plus Messenger 13.0.2.0 declares the current method locally with Landroidx/collection/k;.
 val NotificationsControllerRemoveDeletedMessagesPlusFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/NotificationsController;",
     name = "removeDeletedMessagesFromNotifications",
@@ -536,9 +537,8 @@ val MessageObjectIsMusicFingerprint = Fingerprint(
 
 // ─── Anti-disappearing media (additional) ────────────────────────────────────
 
-// MessageObject.needDrawBluredPreview()Z — blurs self-destructing media previews.
-// Telegram/Web method body is available; the supplied Plus APK contains call references but no
-// local MessageObject class definition, so this is not a confirmed Plus target.
+// MessageObject.needDrawBluredPreview()Z — current method body verified in Telegram,
+// Telegram Web, and Plus Messenger 13.0.2.0. Retained as a shared direct target.
 val MessageObjectNeedDrawBluredPreviewFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessageObject;",
     name = "needDrawBluredPreview",
@@ -651,6 +651,26 @@ val SharedConfigGetDevicePerformanceClassFingerprint = Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
 )
 
+// Plus Messenger 13.0.2.0 current ad-loader owner. The older no-argument signature is
+// retained below as a legacy fallback; do not confuse the two method descriptors.
+val PlusApplicationLoaderLoadAdsCurrentFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/ApplicationLoader;",
+    name = "loadAds",
+    returnType = "V",
+    parameters = listOf(
+        "Landroid/app/Activity;",
+        "Lorg/telegram/ui/Cells/m3;",
+    ),
+)
+
+// Legacy Plus builds used ApplicationLoader.loadAds()V.
+val PlusApplicationLoaderLoadAdsLegacyFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/ApplicationLoader;",
+    name = "loadAds",
+    returnType = "V",
+    parameters = emptyList(),
+)
+
 // MessagesController.getSponsoredMessages(J) — fetches sponsored msg cache entry
 val MessagesControllerGetSponsoredMessagesFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
@@ -704,9 +724,9 @@ val DialogCellUpdateMessageThumbsFingerprint = Fingerprint(
 
 // ─── Plus-specific (safe to probe via methodOrNull on non-Plus builds) ────────
 
-// MessagesController.premiumFeaturesBlocked()Z
-// Present in Telegram and Telegram Web 12.10.6; body checks premiumLocked and UserConfig.isPremium().
-// The supplied Plus 12.10.6.0 APK has no local MessagesController definition, so this is not a Plus hook.
+// MessagesController.premiumFeaturesBlocked()Z — legacy catalogue entry; current Plus
+// MessagesController is present in the 13.0.2.0 APK. Keep this declaration separate from
+// active paid-entitlement behavior; signature presence alone does not authorize patching it.
 val PremiumFeaturesBlockedFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
     name = "premiumFeaturesBlocked",
@@ -935,8 +955,8 @@ val AnalyticsTrackEventMapFingerprint = Fingerprint(
 // ════════════════════════════════════════════════════════════════════════════════
 
 /**
- * Instruction-audited privacy/telemetry fingerprints for Telegram 12.10.6,
- * Telegram Web 12.10.6 and Plus Messenger 12.10.6.0.
+ * Instruction-audited privacy/telemetry fingerprints for Telegram 13.0.2,
+ * Telegram Web 13.0.2 and Plus Messenger 13.0.2.0.
  *
  * Telegram/Web do not bundle Firebase Analytics or Crashlytics in their standard
  * DEX files. Their ApplicationLoader App Center entry points are no-op stubs in
@@ -958,7 +978,7 @@ val TelegramPrivacyAppCenterStartFingerprint = Fingerprint(
     parameters = listOf("Landroid/app/Activity;"),
 )
 
-// Plus Messenger 12.10.6.0 build 22588: FirebaseAnalytics.smali.
+// Plus Messenger 13.0.2.0 build 22598: FirebaseAnalytics.smali.
 val TelegramPrivacyFirebaseLogEventFingerprint = Fingerprint(
     definingClass = "Lcom/google/firebase/analytics/FirebaseAnalytics;",
     name = "a",

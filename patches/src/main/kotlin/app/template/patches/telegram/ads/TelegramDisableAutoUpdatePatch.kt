@@ -28,7 +28,7 @@ private val messagesControllerCheckPromoInfoInternalFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-/** Plus 12.10.6.0 declares this UI method at org.telegram.ui.Components.UpdateButton. */
+/** Retained UI fallback: Plus 13.0.2.0 still declares UpdateButton.update(Z)V. */
 private val plusUpdateButtonUpdateFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/Components/UpdateButton;",
     name = "update",
@@ -72,9 +72,9 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
             patchedTargets++
         }
 
-        // Plus 12.10.6.0 exposes UpdateButton.update(Z)V even though the three
-        // standard SharedConfig/MessagesController method bodies are not declared
-        // in the supplied Plus DEX set. Disable this verified UI update path there.
+        // The three SharedConfig/MessagesController targets have local method bodies in all
+        // supplied 13.0.2 APKs. Keep the verified Plus UpdateButton hook as an additional
+        // fallback for Plus UI flows that reach the update prompt.
         plusUpdateButtonUpdateFingerprint.methodOrNull?.let { method ->
             method.addInstructions(0, "return-void")
             patchedTargets++

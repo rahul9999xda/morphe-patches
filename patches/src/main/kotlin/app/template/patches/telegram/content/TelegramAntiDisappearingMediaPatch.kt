@@ -58,12 +58,12 @@ private val needDrawBluredPreviewFingerprint = Fingerprint(
 )
 
 /**
- * Telegram/Web 12.10.4 and Telegram Plus 12.10.3.0 expose SecretMediaViewer's
+ * Telegram 13.0.2, Telegram Web 13.0.2 and Telegram Plus 13.0.2.0 expose SecretMediaViewer's
  * close routine through obfuscated methods. Earlier versions of this patch
  * attempted to identify the close routine by matching every Runnable field read
  * in SecretMediaViewer.e(ZZ)Z / its Plus equivalent.
  *
- * DEX verification of the supplied 12.10.x builds shows that this is unsafe:
+ * DEX verification of the supplied 13.0.2 builds confirms that this is unsafe:
  * the matched Runnable reads are lifecycle callbacks, including callbacks that
  * are immediately invoked with Runnable.run(). Replacing those reads with
  * const/4 0 can cause a null Runnable invocation and break the viewer.
