@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/rahul9999xda/morphe-patches/stargazers"><img src="https://img.shields.io/github/stars/rahul9999xda/morphe-patches?label=STARS&style=flat-square&color=D4A72C" alt="Stars"></a>
-  <img src="https://img.shields.io/badge/PATCHES-14-D05A9B?style=flat-square" alt="Patches">
+  <img src="https://img.shields.io/badge/PATCHES-15-D05A9B?style=flat-square" alt="Patches">
 </p>
 
 <p align="center">
@@ -47,11 +47,11 @@ Releases and test builds are produced through the repository's configured build 
 <!-- PATCHES_START -->
 ## 🩹 Patches list
 
-> [v1.9.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.9.0) · `main` · **14 patches total**
+> [v1.10.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.10.0) · `main` · **15 patches total**
 
 
 <details>
-<summary><strong>Telegram</strong> · 14 patches</summary>
+<summary><strong>Telegram</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -71,6 +71,7 @@ Releases and test builds are produced through the repository's configured build 
 | **Disable channel switching** | Disables the pull-down gesture that switches to the next unread channel when a stable target exists. |
 | **Disable telemetry and analytics** | Disables Firebase Analytics and Crashlytics collection where bundled and blocks app telemetry logging entry points. |
 | **Download speed boost** | Increases download chunk size to 1 MB and max concurrent requests to 12. |
+| **Hide Stories read status** | Prevents the client from processing and sending Stories read receipts. |
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on 12.10.x builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks the Plus ad loader. |
 | **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
@@ -79,7 +80,7 @@ Releases and test builds are produced through the repository's configured build 
 </details>
 
 <details>
-<summary><strong>Telegram Plus</strong> · 13 patches</summary>
+<summary><strong>Telegram Plus</strong> · 14 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -99,6 +100,7 @@ Releases and test builds are produced through the repository's configured build 
 | **Disable channel switching** | Disables the pull-down gesture that switches to the next unread channel when a stable target exists. |
 | **Disable telemetry and analytics** | Disables Firebase Analytics and Crashlytics collection where bundled and blocks app telemetry logging entry points. |
 | **Download speed boost** | Increases download chunk size to 1 MB and max concurrent requests to 12. |
+| **Hide Stories read status** | Prevents the client from processing and sending Stories read receipts. |
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on 12.10.x builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks the Plus ad loader. |
 | **Voice to music** | Plays voice notes through the music-player path while preserving Raise-to-Listen. |
@@ -106,7 +108,7 @@ Releases and test builds are produced through the repository's configured build 
 </details>
 
 <details>
-<summary><strong>Telegram Web</strong> · 14 patches</summary>
+<summary><strong>Telegram Web</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -126,6 +128,7 @@ Releases and test builds are produced through the repository's configured build 
 | **Disable channel switching** | Disables the pull-down gesture that switches to the next unread channel when a stable target exists. |
 | **Disable telemetry and analytics** | Disables Firebase Analytics and Crashlytics collection where bundled and blocks app telemetry logging entry points. |
 | **Download speed boost** | Increases download chunk size to 1 MB and max concurrent requests to 12. |
+| **Hide Stories read status** | Prevents the client from processing and sending Stories read receipts. |
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on 12.10.x builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks the Plus ad loader. |
 | **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
