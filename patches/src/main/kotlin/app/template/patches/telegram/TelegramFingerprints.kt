@@ -286,7 +286,7 @@ val SetContentSettingsFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-// Current 13.0.2 four-argument overloads: Telegram uses Lfe/e;, Web uses Lie/e;, and Plus uses Ldj/e$c;.
+// Legacy 13.0.2 four-argument overloads (kept for older APKs): Telegram uses Lfe/e;, Web uses Lie/e;, and Plus uses Ldj/e$c;.
 // Each descriptor is confirmed in its corresponding clean APK; the old Plus Lej/e$c; stays legacy-only.
 val CheckCanOpenChat4NormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
@@ -334,6 +334,58 @@ val CheckCanOpenChat4PlusLegacyFingerprint = Fingerprint(
         "Lorg/telegram/ui/ActionBar/i2;",
         "Lorg/telegram/messenger/MessageObject;",
         "Lej/e\$c;",
+    ),
+)
+
+// Telegram 13.0.3 build 71831 changed the standard UI fragment from ActionBar/s2 to ActionBar/r2.
+// Telegram Web 13.0.3 build 71839 retains ActionBar/s2 but changed its final callback type from ie/e to je/e.
+val ShowCantOpenAlertNormal1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "showCantOpenAlert",
+    returnType = "V",
+    parameters = listOf("Lorg/telegram/ui/ActionBar/r2;", "Ljava/lang/String;"),
+)
+
+val CheckSensitiveNormal1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkSensitive",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/ui/ActionBar/r2;", "J", "Ljava/lang/Runnable;", "Ljava/lang/Runnable;",
+    ),
+)
+
+val CheckCanOpenChat2Normal1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf("Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/r2;"),
+)
+
+val CheckCanOpenChat3Normal1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/r2;", "Lorg/telegram/messenger/MessageObject;",
+    ),
+)
+
+val CheckCanOpenChat4Normal1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/r2;", "Lorg/telegram/messenger/MessageObject;", "Lge/e;",
+    ),
+)
+
+val CheckCanOpenChat4Web1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/s2;", "Lorg/telegram/messenger/MessageObject;", "Lje/e;",
     ),
 )
 
@@ -624,8 +676,10 @@ val StoriesReadReceiptFlowFingerprint = Fingerprint(
                 "Z",
             ) &&
             method.definingClass.toString() in setOf(
-                "Lsg/q5;", // Telegram 13.0.2
-                "Lvg/o5;", // Telegram Web 13.0.2
+                "Ltg/p5;", // Telegram 13.0.3 build 71831
+                "Lwg/m5;", // Telegram Web 13.0.3 build 71839
+                "Lsg/q5;", // Telegram 13.0.2 legacy
+                "Lvg/o5;", // Telegram Web 13.0.2 legacy
                 "Lorg/telegram/ui/Stories/yc;", // Plus 13.0.2.0
             )
     },

@@ -15,7 +15,7 @@ object Constants {
         packageName = "org.telegram.messenger",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.0.2", versionCode = 71751))
+        targets = listOf(AppTarget(version = "13.0.3", versionCode = 71831))
     )
 
     val TELEGRAM_PLUS_COMPATIBILITY = Compatibility(
@@ -31,6 +31,6 @@ object Constants {
         packageName = "org.telegram.messenger.web",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.0.2", versionCode = 71759))
+        targets = listOf(AppTarget(version = "13.0.3", versionCode = 71839))
     )
 }
