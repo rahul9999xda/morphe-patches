@@ -573,6 +573,45 @@ val SendScreenshotMessageSecretFingerprint = Fingerprint(
     ),
 )
 
+// ─── Stories hide-read receipt flow (Telegram/Web/Plus 13.0.2) ────────────────
+// Verified against the untouched Telegram 13.0.2 build 71751, Web 13.0.2 build
+// 71759, and Plus 13.0.2.0 build 22598. All three methods accept PeerStories,
+// StoryItem, boolean and return boolean. Their R8 names differ, but each body calls
+// NotificationsController.processReadStories(JI)V, constructs TL_stories_readStories,
+// and sends it through ConnectionsManager.sendRequest(...).
+val StoriesReadReceiptFlowFingerprint = Fingerprint(
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/NotificationsController;",
+            name = "processReadStories",
+            returnType = "V",
+        ),
+        methodCall(
+            definingClass = "Lorg/telegram/tgnet/tl/TL_stories\$TL_stories_readStories;",
+            name = "<init>",
+            returnType = "V",
+        ),
+        methodCall(
+            definingClass = "Lorg/telegram/tgnet/ConnectionsManager;",
+            name = "sendRequest",
+            returnType = "I",
+        ),
+    ),
+    custom = { method, _ ->
+        method.returnType.toString() == "Z" &&
+            method.parameterTypes.map { it.toString() } == listOf(
+                "Lorg/telegram/tgnet/tl/TL_stories\$PeerStories;",
+                "Lorg/telegram/tgnet/tl/TL_stories\$StoryItem;",
+                "Z",
+            ) &&
+            method.definingClass.toString() in setOf(
+                "Lsg/q5;", // Telegram 13.0.2
+                "Lvg/o5;", // Telegram Web 13.0.2
+                "Lorg/telegram/ui/Stories/yc;", // Plus 13.0.2.0
+            )
+    },
+)
+
 // ─── User no-forwards (missing from original set) ─────────────────────────────
 
 val MessagesControllerIsUserNoForwardsLongFingerprint = Fingerprint(

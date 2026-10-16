@@ -63,7 +63,10 @@ val telegramRemoveAdsPatch = bytecodePatch(
             return v0
         """)
 
-        messagesControllerGetSponsoredMessagesFingerprint.method.addInstructions(0, """
+        // This named method is absent from Telegram 13.0.2, Web 13.0.2 and Plus 13.0.2.0.
+        // Keep the legacy hook as an optional fallback for older builds; the other confirmed
+        // ad gates below remain the primary targets on the current builds.
+        messagesControllerGetSponsoredMessagesFingerprint.methodOrNull?.addInstructions(0, """
             const/4 v0, 0x0
             return-object v0
         """)
