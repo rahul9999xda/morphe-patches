@@ -10,6 +10,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val deleteMessagesByPushFingerprint = Fingerprint(
@@ -97,10 +98,15 @@ val telegramAntiDeletePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        deleteMessagesByPushFingerprint.method.addInstructions(
-            0,
-            "return-void",
-        )
+        // Resolve the named method on Telegram/Web and older supported Plus builds.
+        // Plus 13.0.2.0 renamed this worker to m3 and changed its argument list;
+        // its body was verified to perform both push deletion and storage deletion.
+        val deleteMessagesByPushMethod =
+            deleteMessagesByPushFingerprint.methodOrNull
+                ?: MessagesControllerDeletePushMessagesPlusFingerprint.methodOrNull
+                ?: error("Failed to match deleteMessagesByPush for Telegram/Web/Plus")
+
+        deleteMessagesByPushMethod.addInstructions(0, "return-void")
 
         markMessagesAsDeletedFingerprint.method.addInstructions(
             0,

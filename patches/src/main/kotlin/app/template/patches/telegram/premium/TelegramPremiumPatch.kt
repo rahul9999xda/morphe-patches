@@ -3,6 +3,7 @@ package app.template.patches.telegram.premium
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
+import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.MessagesControllerIsPremiumUserFingerprint
 import app.template.patches.telegram.MessagesControllerIsTranslationsAutoEnabledFingerprint
@@ -18,10 +19,16 @@ val telegramPremiumPatch = bytecodePatch(
     name = "Unlock Premium",
     description = "Unlocks Telegram Premium features for the current account.",
 ) {
-    // Instruction-level audit scope: Telegram 12.10.6 and Telegram Web 12.10.6.
-    // Plus 12.10.6.0 has a verified UpdateButton.update(Z)V UI method, but does not
-    // locally declare the core MessagesController target required by this patch.
-    compatibleWith(TELEGRAM_COMPATIBILITY, TELEGRAM_WEB_COMPATIBILITY)
+    // DEX-verified against Telegram 13.0.2 build 71751, Telegram Web 13.0.2
+    // build 71759, and Plus Messenger 13.0.2.0 build 22598. The core premium
+    // and translation-gate methods below use identical descriptors in all three.
+    // Existing legacy targets are unchanged; only builds whose exact fingerprints resolve
+    // are eligible, so this does not broaden support by guessing renamed methods.
+    compatibleWith(
+        TELEGRAM_COMPATIBILITY,
+        TELEGRAM_WEB_COMPATIBILITY,
+        TELEGRAM_PLUS_COMPATIBILITY,
+    )
 
     dependsOn(telegramSpoofDependency())
 
@@ -34,7 +41,7 @@ val telegramPremiumPatch = bytecodePatch(
             """,
         )
 
-        // Exact body-level target in Telegram and Web. Plus support is intentionally excluded.
+        // Exact body-level target verified in Telegram, Web, and Plus.
         MessagesControllerIsPremiumUserFingerprint.method.addInstructions(
             0,
             """
@@ -43,7 +50,7 @@ val telegramPremiumPatch = bytecodePatch(
             """,
         )
 
-        // Both exact methods exist in Telegram and Web 12.10.6. They are client-side
+        // Both exact methods exist in Telegram, Web, and Plus 13.0.2. They are client-side
         // app-config gates for translation controls; enabling them does not override
         // server-side account checks or per-chat translations_disabled flags.
         MessagesControllerIsTranslationsManualEnabledFingerprint.method.addInstructions(
