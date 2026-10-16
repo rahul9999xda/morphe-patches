@@ -127,12 +127,9 @@ jobs:
       - name: Generate release notes
         run: |
           set -euo pipefail
+          # generate_release_notes.py also prepends the generated entry to CHANGELOG.md.
+          # Do not run a second changelog updater here; that can create duplicate entries.
           python3 .github/scripts/generate_release_notes.py "$VERSION" "$PREVIOUS_TAG" RELEASE_NOTES.md
-          python3 .github/scripts/update_changelog.py \
-            "$VERSION" \
-            "$PREVIOUS_TAG" \
-            RELEASE_NOTES.md \
-            CHANGELOG.md
           cat RELEASE_NOTES.md
 
       - name: Generate current patch list and README
@@ -169,7 +166,7 @@ jobs:
             '{created_at: $created_at, description: $description, download_url: $download_url, signature_download_url: "", version: $version}' \
             > patches-bundle.json
 
-          git add gradle.properties patches-bundle.json
+          git add gradle.properties patches-bundle.json CHANGELOG.md
 
           if [ "${RELEASE_KIND}" = "stable" ]; then
             git add README.md patches-list.json
