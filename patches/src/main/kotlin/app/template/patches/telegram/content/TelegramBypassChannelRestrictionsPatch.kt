@@ -312,7 +312,7 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
         resolveVariantMethod(
             showCantOpenAlertWebFingerprint,
             showCantOpenAlertNormalFingerprint,
-            showCantOpenAlertNormal1303Fingerprint,
+            ShowCantOpenAlertNormal1303Fingerprint,
             showCantOpenAlertPlusFingerprint,
             methodName = "showCantOpenAlert",
         ).addInstructions(0, "return-void")
@@ -322,7 +322,7 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
         resolveVariantMethod(
             checkSensitiveWebFingerprint,
             checkSensitiveNormalFingerprint,
-            checkSensitiveNormal1303Fingerprint,
+            CheckSensitiveNormal1303Fingerprint,
             checkSensitivePlusFingerprint,
             methodName = "checkSensitive",
         ).addInstructions(
@@ -339,22 +339,22 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
             resolveVariantMethod(
                 checkCanOpenChat2WebFingerprint,
                 checkCanOpenChat2NormalFingerprint,
-                checkCanOpenChat2Normal1303Fingerprint,
+                CheckCanOpenChat2Normal1303Fingerprint,
                 checkCanOpenChat2PlusFingerprint,
                 methodName = "checkCanOpenChat/2",
             ),
             resolveVariantMethod(
                 checkCanOpenChat3WebFingerprint,
                 checkCanOpenChat3NormalFingerprint,
-                checkCanOpenChat3Normal1303Fingerprint,
+                CheckCanOpenChat3Normal1303Fingerprint,
                 checkCanOpenChat3PlusFingerprint,
                 methodName = "checkCanOpenChat/3",
             ),
             resolveVariantMethod(
                 checkCanOpenChat4WebFingerprint,
                 checkCanOpenChat4NormalFingerprint,
-                checkCanOpenChat4Normal1303Fingerprint,
-                checkCanOpenChat4Web1303Fingerprint,
+                CheckCanOpenChat4Normal1303Fingerprint,
+                CheckCanOpenChat4Web1303Fingerprint,
                 checkCanOpenChat4PlusFingerprint,
                 checkCanOpenChat4PlusLegacyFingerprint,
                 methodName = "checkCanOpenChat/4",
