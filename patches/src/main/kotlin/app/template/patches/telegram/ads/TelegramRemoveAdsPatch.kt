@@ -6,6 +6,8 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.PlusApplicationLoaderLoadAdsCurrentFingerprint
+import app.template.patches.telegram.PlusApplicationLoaderLoadAdsLegacyFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val messageObjectIsSponsoredFingerprint = Fingerprint(
@@ -33,17 +35,10 @@ private val videoAdsLoadFingerprint = Fingerprint(
     returnType = "V",
 )
 
-/** Telegram Plus 12.10.3.0 */
-private val plusApplicationLoaderLoadAdsFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/ApplicationLoader;",
-    name = "loadAds",
-    returnType = "V",
-)
-
 @Suppress("unused")
 val telegramRemoveAdsPatch = bytecodePatch(
     name = "Remove ads",
-    description = "Removes sponsored messages and video ads. On Telegram Plus also blocks the Plus ad loader.",
+    description = "Removes sponsored messages and video ads. On Telegram Plus also blocks current and legacy Plus ad-loader entry points.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -63,15 +58,22 @@ val telegramRemoveAdsPatch = bytecodePatch(
             return v0
         """)
 
-        // This named method is absent from Telegram 13.0.2, Web 13.0.2 and Plus 13.0.2.0.
-        // Keep the legacy hook as an optional fallback for older builds; the other confirmed
-        // ad gates below remain the primary targets on the current builds.
+        // This method has a local body in all three supplied 13.0.2 APKs. Keep the hook
+        // optional so older compatible variants without this cache helper remain patchable.
         messagesControllerGetSponsoredMessagesFingerprint.methodOrNull?.addInstructions(0, """
             const/4 v0, 0x0
             return-object v0
         """)
 
         videoAdsLoadFingerprint.method.addInstructions(0, "return-void")
-        plusApplicationLoaderLoadAdsFingerprint.methodOrNull?.addInstructions(0, "return-void")
+
+        // Plus Messenger 13.0.2.0 changed loadAds()V to loadAds(Activity, Cells.m3)V.
+        // Keep the historical no-argument signature as a separate fallback for older Plus builds.
+        listOf(
+            PlusApplicationLoaderLoadAdsCurrentFingerprint.methodOrNull,
+            PlusApplicationLoaderLoadAdsLegacyFingerprint.methodOrNull,
+        ).filterNotNull().distinct().forEach { method ->
+            method.addInstructions(0, "return-void")
+        }
     }
 }

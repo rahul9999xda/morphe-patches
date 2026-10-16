@@ -107,8 +107,7 @@ val telegramAntiDeletePatch = bytecodePatch(
             """
                 if-nez p4, :continue_original
                 new-instance v0, Ljava/util/ArrayList;
-                invoke-direct {v0}, Ljava/util/ArrayList;->
-<init>()V
+                invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
                 return-object v0
                 :continue_original
                 nop

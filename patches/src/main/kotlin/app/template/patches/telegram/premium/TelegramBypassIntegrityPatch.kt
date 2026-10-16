@@ -37,8 +37,9 @@ private val CERT_HASHES = mapOf(
     "org.telegram.plus"          to "6EBB622268AAD319DBE8A1F414837D2843A9B35856AEFB7DEE2971A3D493F276",
 )
 
-// Plus calls this method from ConnectionsManager but the method body itself is not
-// declared in the supplied Plus APK. Patch the verified call-site there instead.
+// Legacy call-site fallback retained for Plus builds where the helper body is not local.
+// In the supplied Plus Messenger 13.0.2.0 APK the helper body is present, so the direct
+// fingerprint is preferred and this call-site path is only used when that body is absent.
 private val plusCertificateFingerprintCallSite = Fingerprint(
     filters = listOf(
         methodCall(
@@ -72,8 +73,8 @@ val telegramBypassIntegrityPatch = bytecodePatch(
         val certHash = CERT_HASHES[detectedPackageName]
             ?: error("No cert hash for package '$detectedPackageName'")
 
-        // Return the exact original certificate SHA-256. On Plus, the helper body is
-        // not declared in this APK, so replace its one verified call-site in place.
+        // Return the exact original certificate SHA-256. Prefer the verified local helper
+        // body in all three supplied 13.0.2 APKs; retain call-site fallback for legacy variants.
         val certMethod = AndroidUtilitiesGetCertFingerprintFingerprint.methodOrNull
         if (certMethod != null) {
             certMethod.addInstructions(0, """

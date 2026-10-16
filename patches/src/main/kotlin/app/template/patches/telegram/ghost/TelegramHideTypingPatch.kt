@@ -9,7 +9,8 @@ import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
- * Telegram 12.10.x no longer exposes the old needSendTyping() hook used by
+ * Telegram 13.0.2, Telegram Web 13.0.2 and Plus Messenger 13.0.2.0 no longer expose
+ * the old needSendTyping() hook used by
  * earlier versions. DEX verification shows that the actual controller-level
  * dispatchers are MessagesController.sendTyping(JJII)Z and
  * MessagesController.sendTyping(JJILjava/lang/String;I)Z.
@@ -34,7 +35,7 @@ private val sendTypingActionFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramHideTypingPatch = bytecodePatch(
     name = "Hide typing indicator",
-    description = "Blocks Telegram's controller-level sendTyping dispatch on 12.10.x builds.",
+    description = "Blocks Telegram's controller-level sendTyping dispatch on audited 13.0.2 builds.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,

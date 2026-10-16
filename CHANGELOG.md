@@ -1,3 +1,7 @@
+## [1.11.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.10.0...v1.11.0-dev1) (2026-10-16)
+### 🐛 Bug Fixes
+
+* **telegram:** refresh 13.0.2 fingerprints and Plus ad loader ([1f53fa2](https://github.com/rahul9999xda/morphe-patches/commit/1f53fa2487cbc3b6083e22e312eaebe77bb09da4))
 ## [1.10.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.9.0...v1.10.0) (2026-10-16)
 ### 🐛 Bug Fixes
 
