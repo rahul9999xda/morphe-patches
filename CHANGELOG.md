@@ -1,3 +1,8 @@
+## 1.8.0 (2026-10-14)
+### 🐛 Bug Fixes
+
+* restore older releases in Morphe source history
+
 ## [1.7.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.6.0...v1.7.0) (2026-10-14)
 ### ✨ New Features
 
