@@ -47,7 +47,7 @@ Releases and test builds are produced through the repository's configured build 
 <!-- PATCHES_START -->
 ## 🩹 Patches list
 
-> [v1.11.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.11.0) · `main` · **15 patches total**
+> [v1.12.0](https://github.com/rahul9999xda/morphe-patches/releases/tag/v1.12.0) · `main` · **15 patches total**
 
 
 <details>
@@ -55,7 +55,7 @@ Releases and test builds are produced through the repository's configured build 
 
 🎯 **Supported versions:**
 
-`13.0.2`
+`13.0.3`
 
 ---
 
@@ -80,7 +80,7 @@ Releases and test builds are produced through the repository's configured build 
 </details>
 
 <details>
-<summary><strong>Telegram Plus</strong> · 14 patches</summary>
+<summary><strong>Telegram Plus</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -103,6 +103,7 @@ Releases and test builds are produced through the repository's configured build 
 | **Hide Stories read status** | Prevents the client from processing and sending Stories read receipts. |
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on audited 13.0.2 builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks current and legacy Plus ad-loader entry points. |
+| **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
 | **Voice to music** | Plays voice notes through the music-player path while preserving Raise-to-Listen. |
 
 </details>
@@ -112,7 +113,7 @@ Releases and test builds are produced through the repository's configured build 
 
 🎯 **Supported versions:**
 
-`13.0.2`
+`13.0.3`
 
 ---
 
