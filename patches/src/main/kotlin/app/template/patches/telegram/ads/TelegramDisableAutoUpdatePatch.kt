@@ -49,39 +49,27 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        var patchedTargets = 0
+        requireNotNull(sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull) {
+            "Missing SharedConfig.isAppUpdateAvailable()Z"
+        }.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
 
-        sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
-            patchedTargets++
-        }
+        requireNotNull(sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull) {
+            "Missing SharedConfig.setNewAppVersionAvailable(TL_help_appUpdate)Z"
+        }.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
 
-        sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
-            patchedTargets++
-        }
-
-        messagesControllerCheckPromoInfoInternalFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, "return-void")
-            patchedTargets++
-        }
+        requireNotNull(messagesControllerCheckPromoInfoInternalFingerprint.methodOrNull) {
+            "Missing MessagesController.checkPromoInfoInternal(Z)V"
+        }.addInstructions(0, "return-void")
 
         // The three SharedConfig/MessagesController targets have local method bodies in all
-        // supplied 13.0.2 APKs. Keep the verified Plus UpdateButton hook as an additional
-        // fallback for Plus UI flows that reach the update prompt.
-        plusUpdateButtonUpdateFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, "return-void")
-            patchedTargets++
-        }
-
-        if (patchedTargets == 0) {
-            error("No verified auto-update target found in this APK; refusing a silent no-op patch")
-        }
+        // three audited APKs (Telegram/Web 13.0.3 and Plus 13.0.2.0). Keep the verified Plus
+        // UpdateButton hook as an additional fallback for Plus UI flows reaching the prompt.
+        plusUpdateButtonUpdateFingerprint.methodOrNull?.addInstructions(0, "return-void")
     }
 }

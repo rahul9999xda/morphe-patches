@@ -10,7 +10,7 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
  * The former ChatPullingDownDrawable implementation is not present under its old
- * class/method names in the supplied Telegram 13.0.2, Web 13.0.2 or Plus 13.0.2.0 DEX sets.
+ * class/method names in the supplied Telegram/Web 13.0.3 or Plus 13.0.2.0 DEX sets.
  * The old three fingerprints therefore must
  * not be required: doing so is exactly what caused the 12.10.4 patch failure.
  *
@@ -32,7 +32,7 @@ val telegramDisableChannelSwitchingPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        // No unsafe 13.0.2 replacement is applied here.
+        // No unsafe replacement is applied to the audited current targets.
         // The obsolete ChatPullingDownDrawable hooks are absent from all three
         // inspected APKs, so leaving this patch as a no-op prevents a false
         // positive hook from breaking the rest of the patch set.

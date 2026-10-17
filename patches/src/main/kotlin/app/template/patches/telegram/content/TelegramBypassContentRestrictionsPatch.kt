@@ -109,11 +109,18 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
         """)
 
         listOf(messageNoForwardsReadFingerprint, chatNoForwardsReadFingerprint).forEach { fingerprint ->
-            fingerprint.matchAllOrNull()?.forEach { match ->
+            val matches = fingerprint.matchAllOrNull().orEmpty()
+            require(matches.isNotEmpty()) {
+                "No no-forwards field-read sites matched ${fingerprint}"
+            }
+            matches.forEach { match ->
                 match.method.apply {
                     match.instructionMatches.map { it.index }.reversed().forEach { index ->
                         val register = getInstruction<TwoRegisterInstruction>(index).registerA
-                        replaceInstruction(index, "const/4 v$register, 0x0")
+                        // IGET_BOOLEAN uses the 22c format: registerA is encoded in
+                        // four bits, so this destination is guaranteed to be v0-v15.
+                        val replacement = "const/4 v$register, 0x0"
+                        replaceInstruction(index, replacement)
                     }
                 }
             }

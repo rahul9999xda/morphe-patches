@@ -73,8 +73,9 @@ val telegramBypassIntegrityPatch = bytecodePatch(
         val certHash = CERT_HASHES[detectedPackageName]
             ?: error("No cert hash for package '$detectedPackageName'")
 
-        // Return the exact original certificate SHA-256. Prefer the verified local helper
-        // body in all three supplied 13.0.2 APKs; retain call-site fallback for legacy variants.
+        // Return the exact original certificate SHA-256. Prefer the verified local AndroidUtilities
+        // helper body in all three audited clean APKs (Telegram/Web 13.0.3, Plus 13.0.2.0);
+        // retain call-site fallback for legacy variants.
         val certMethod = AndroidUtilitiesGetCertFingerprintFingerprint.methodOrNull
         if (certMethod != null) {
             certMethod.addInstructions(0, """

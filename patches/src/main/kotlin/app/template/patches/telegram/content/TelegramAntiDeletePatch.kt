@@ -120,7 +120,11 @@ val telegramAntiDeletePatch = bytecodePatch(
             """,
         )
 
-        deletedMessageUiFingerprint.matchAllOrNull()?.forEach { match ->
+        val deletedMessageUiMatches = deletedMessageUiFingerprint.matchAllOrNull().orEmpty()
+        require(deletedMessageUiMatches.size == 1) {
+            "Expected exactly one deleted-message UI hook, found ${deletedMessageUiMatches.size}"
+        }
+        deletedMessageUiMatches.forEach { match ->
             match.instructionMatches
                 .map { it.index }
                 .reversed()

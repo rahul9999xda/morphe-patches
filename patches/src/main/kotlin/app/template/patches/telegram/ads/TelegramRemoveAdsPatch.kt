@@ -58,9 +58,11 @@ val telegramRemoveAdsPatch = bytecodePatch(
             return v0
         """)
 
-        // This method has a local body in all three supplied 13.0.2 APKs. Keep the hook
-        // optional so older compatible variants without this cache helper remain patchable.
-        messagesControllerGetSponsoredMessagesFingerprint.methodOrNull?.addInstructions(0, """
+        // The current cache helper was found in all three audited APKs; fail fast if its
+        // exact descriptor drifts instead of silently leaving this sponsored-message path live.
+        requireNotNull(messagesControllerGetSponsoredMessagesFingerprint.methodOrNull) {
+            "Missing MessagesController.getSponsoredMessages(J)SponsoredMessagesInfo"
+        }.addInstructions(0, """
             const/4 v0, 0x0
             return-object v0
         """)

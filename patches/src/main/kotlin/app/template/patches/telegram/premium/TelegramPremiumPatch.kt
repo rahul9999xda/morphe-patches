@@ -19,8 +19,9 @@ val telegramPremiumPatch = bytecodePatch(
     name = "Unlock Premium",
     description = "Unlocks Telegram Premium features for the current account.",
 ) {
-    // DEX-verified against Telegram 13.0.2 build 71751, Telegram Web 13.0.2
-    // build 71759, and Plus Messenger 13.0.2.0 build 22598. The core premium
+    // DEX-verified against Telegram 13.0.3 build 71831, Telegram Web 13.0.3
+    // build 71839, and Plus Messenger 13.0.2.0 build 22598. Legacy 13.0.2
+    // target descriptors remain separately declared. The core premium
     // and translation-gate methods below use identical descriptors in all three.
     // Existing legacy targets are unchanged; only builds whose exact fingerprints resolve
     // are eligible, so this does not broaden support by guessing renamed methods.
@@ -50,7 +51,7 @@ val telegramPremiumPatch = bytecodePatch(
             """,
         )
 
-        // Both exact methods exist in Telegram, Web, and Plus 13.0.2. They are client-side
+        // Both exact methods exist in Telegram/Web 13.0.3 and Plus 13.0.2.0. They are client-side
         // app-config gates for translation controls; enabling them does not override
         // server-side account checks or per-chat translations_disabled flags.
         MessagesControllerIsTranslationsManualEnabledFingerprint.method.addInstructions(
