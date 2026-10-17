@@ -1,3 +1,8 @@
+## [1.13.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.12.0...v1.13.0) (2026-10-17)
+### 🐛 Bug Fixes
+
+* **telegram:** correct restriction patch register handling ([70f733b](https://github.com/rahul9999xda/morphe-patches/commit/70f733b30d0c943bba8c2be4f6328fa08158104f))
+
 ## [1.13.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.12.0...v1.13.0-dev1) (2026-10-17)
 ### 🐛 Bug Fixes
 
