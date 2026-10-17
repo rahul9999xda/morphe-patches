@@ -47,8 +47,8 @@ private val deletedMessageUiFingerprint = Fingerprint(
 
 /*
  * The first parameter is build-specific:
- *   Telegram / Telegram Web 12.10.6 -> Lz/f;
- *   Telegram Plus 12.10.6.0 -> Landroidx/collection/k;
+ *   Telegram / Telegram Web 13.0.3 (and audited 13.0.2 legacy) -> Lz/f;
+ *   Telegram Plus 13.0.2.0 -> Landroidx/collection/k;
  *   older supported Plus builds may use Landroidx/collection/h;.
  *
  * Resolve the exact known variant at patch time rather than using a stale
@@ -98,9 +98,9 @@ val telegramAntiDeletePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        // Resolve the named method on Telegram/Web and older supported Plus builds.
-        // Plus 13.0.2.0 renamed this worker to m3 and changed its argument list;
-        // its body was verified to perform both push deletion and storage deletion.
+        // The named deleteMessagesByPush method is locally declared in all three clean APKs,
+        // including Plus 13.0.2.0. Keep the separately fingerprinted synthetic Plus worker as
+        // a legacy/fork fallback only; do not assume that fallback is the current Plus target.
         val deleteMessagesByPushMethod =
             deleteMessagesByPushFingerprint.methodOrNull
                 ?: MessagesControllerDeletePushMessagesPlusFingerprint.methodOrNull

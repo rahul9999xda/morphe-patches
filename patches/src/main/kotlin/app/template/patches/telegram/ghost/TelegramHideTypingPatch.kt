@@ -9,7 +9,7 @@ import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
- * Telegram 13.0.2, Telegram Web 13.0.2 and Plus Messenger 13.0.2.0 no longer expose
+ * Telegram/Web 13.0.3 and Plus Messenger 13.0.2.0 no longer expose
  * the old needSendTyping() hook used by
  * earlier versions. DEX verification shows that the actual controller-level
  * dispatchers are MessagesController.sendTyping(JJII)Z and

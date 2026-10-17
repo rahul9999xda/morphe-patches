@@ -10,7 +10,8 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
  * The former ChatPullingDownDrawable implementation is not present under its old
- * class/method names in the supplied Telegram 13.0.2, Web 13.0.2 or Plus 13.0.2.0 DEX sets.
+ * class/method names in the supplied Telegram/Web 13.0.3 or Plus 13.0.2.0 DEX sets; it was
+ * also absent from the separately audited Telegram/Web 13.0.2 legacy builds.
  * The old three fingerprints therefore must
  * not be required: doing so is exactly what caused the 12.10.4 patch failure.
  *

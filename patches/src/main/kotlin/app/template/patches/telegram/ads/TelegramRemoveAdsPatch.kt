@@ -58,7 +58,8 @@ val telegramRemoveAdsPatch = bytecodePatch(
             return v0
         """)
 
-        // This method has a local body in all three supplied 13.0.2 APKs. Keep the hook
+        // This method has a local body in all three audited clean APKs (Telegram/Web 13.0.3,
+        // Plus 13.0.2.0). Keep the hook
         // optional so older compatible variants without this cache helper remain patchable.
         messagesControllerGetSponsoredMessagesFingerprint.methodOrNull?.addInstructions(0, """
             const/4 v0, 0x0
