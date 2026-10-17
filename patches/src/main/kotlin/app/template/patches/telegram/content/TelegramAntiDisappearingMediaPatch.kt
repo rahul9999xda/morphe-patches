@@ -63,7 +63,7 @@ private val needDrawBluredPreviewFingerprint = Fingerprint(
  * attempted to identify the close routine by matching every Runnable field read
  * in SecretMediaViewer.e(ZZ)Z / its Plus equivalent.
  *
- * DEX verification of the supplied 13.0.2 builds confirms that this is unsafe:
+ * DEX verification of the supplied current builds confirms that this is unsafe:
  * the matched Runnable reads are lifecycle callbacks, including callbacks that
  * are immediately invoked with Runnable.run(). Replacing those reads with
  * const/4 0 can cause a null Runnable invocation and break the viewer.

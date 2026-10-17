@@ -20,7 +20,8 @@ val telegramPremiumPatch = bytecodePatch(
     description = "Unlocks Telegram Premium features for the current account.",
 ) {
     // DEX-verified against Telegram 13.0.3 build 71831, Telegram Web 13.0.3
-    // build 71839, and Plus Messenger 13.0.2.0 build 22598. The core premium
+    // build 71839, and Plus Messenger 13.0.2.0 build 22598. Legacy 13.0.2
+    // target descriptors remain separately declared. The core premium
     // and translation-gate methods below use identical descriptors in all three.
     // Existing legacy targets are unchanged; only builds whose exact fingerprints resolve
     // are eligible, so this does not broaden support by guessing renamed methods.

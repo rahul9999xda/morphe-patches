@@ -89,10 +89,9 @@ val spoofFirebaseCertHashPatch = bytecodePatch(
         // with an inline-computed hash that bypasses getFingerprintHashForPackage.
         // Patching the call site as well covers those cases.
         val method = FirebaseOpenHttpConnectionFingerprint.methodOrNull
-            ?: run {
-                // Neither fingerprint matched — SDK not present, nothing to do.
-                return@execute
-            }
+            ?: throw PatchException(
+                "Firebase X-Android-Cert header hook did not resolve. Refusing to report a successful no-op patch."
+            )
 
         val xAndroidCertIndex = FirebaseOpenHttpConnectionFingerprint.stringMatches.first().index
 

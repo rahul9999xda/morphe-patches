@@ -28,7 +28,7 @@ private val messagesControllerCheckPromoInfoInternalFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-/** Retained Plus UI fallback: Plus 13.0.2.0 declares UpdateButton.update(Z)V; Telegram/Web use controller gates. */
+/** Retained UI fallback: Plus 13.0.2.0 still declares UpdateButton.update(Z)V. */
 private val plusUpdateButtonUpdateFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/Components/UpdateButton;",
     name = "update",
@@ -49,39 +49,27 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        var patchedTargets = 0
+        requireNotNull(sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull) {
+            "Missing SharedConfig.isAppUpdateAvailable()Z"
+        }.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
 
-        sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
-            patchedTargets++
-        }
+        requireNotNull(sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull) {
+            "Missing SharedConfig.setNewAppVersionAvailable(TL_help_appUpdate)Z"
+        }.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
 
-        sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
-            patchedTargets++
-        }
+        requireNotNull(messagesControllerCheckPromoInfoInternalFingerprint.methodOrNull) {
+            "Missing MessagesController.checkPromoInfoInternal(Z)V"
+        }.addInstructions(0, "return-void")
 
-        messagesControllerCheckPromoInfoInternalFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, "return-void")
-            patchedTargets++
-        }
-
-        // The three SharedConfig/MessagesController targets have local method bodies in Telegram
-        // 13.0.3, Telegram Web 13.0.3, and Plus 13.0.2.0. Keep the verified Plus UpdateButton hook as an additional
-        // fallback for Plus UI flows that reach the update prompt.
-        plusUpdateButtonUpdateFingerprint.methodOrNull?.let { method ->
-            method.addInstructions(0, "return-void")
-            patchedTargets++
-        }
-
-        if (patchedTargets == 0) {
-            error("No verified auto-update target found in this APK; refusing a silent no-op patch")
-        }
+        // The three SharedConfig/MessagesController targets have local method bodies in all
+        // three audited APKs (Telegram/Web 13.0.3 and Plus 13.0.2.0). Keep the verified Plus
+        // UpdateButton hook as an additional fallback for Plus UI flows reaching the prompt.
+        plusUpdateButtonUpdateFingerprint.methodOrNull?.addInstructions(0, "return-void")
     }
 }
