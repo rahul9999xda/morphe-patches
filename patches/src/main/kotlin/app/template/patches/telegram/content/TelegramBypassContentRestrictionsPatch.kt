@@ -113,7 +113,14 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
                 match.method.apply {
                     match.instructionMatches.map { it.index }.reversed().forEach { index ->
                         val register = getInstruction<TwoRegisterInstruction>(index).registerA
-                        replaceInstruction(index, "const/4 v$register, 0x0")
+                        // const/4 encodes only v0-v15. Some matched methods use a higher
+                        // destination register, so select a wider encoding when necessary.
+                        val replacement = if (register <= 15) {
+                            "const/4 v$register, 0x0"
+                        } else {
+                            "const/16 v$register, 0x0"
+                        }
+                        replaceInstruction(index, replacement)
                     }
                 }
             }
