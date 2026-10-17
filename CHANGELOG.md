@@ -2,6 +2,11 @@
 ### 🐛 Bug Fixes
 
 * **telegram:** correct restriction patch register handling ([70f733b](https://github.com/rahul9999xda/morphe-patches/commit/70f733b30d0c943bba8c2be4f6328fa08158104f))
+## [1.12.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.11.0...v1.12.0) (2026-10-17)
+### 🐛 Bug Fixes
+
+* **telegram:** add 13.0.3 fingerprints and targets ([44edd5d](https://github.com/rahul9999xda/morphe-patches/commit/44edd5d8b0aef51575848187310565c210ce9e14))
+* **anti-delete:** add verified Plus 13.0.2 push-delete hook ([170b715](https://github.com/rahul9999xda/morphe-patches/commit/170b715b093fee6c4b2a26db3268cd6db46c6057))
 
 ## [1.12.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.11.0...v1.12.0-dev1) (2026-10-17)
 ### 🐛 Bug Fixes
