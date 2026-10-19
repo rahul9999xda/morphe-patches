@@ -1109,3 +1109,11 @@ val TelegramPrivacyCrashlyticsLogFingerprint = Fingerprint(
     returnType = "V",
     parameters = listOf("Ljava/lang/String;"),
 )
+
+// ─── Rich HTML paste ──────────────────────────────────────────────────────────
+val ChatActivityEnterViewHandleRichHtmlPasteFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
+    name = "handleRichHtmlPaste",
+    returnType = "Z",
+    parameters = listOf(),
+)
