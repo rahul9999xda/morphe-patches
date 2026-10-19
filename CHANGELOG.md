@@ -1,3 +1,12 @@
+## [1.14.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.13.0...v1.14.0-dev1) (2026-10-19)
+### 🐛 Bug Fixes
+
+* **telegram:** update rich HTML paste fingerprints for 13.0.3 ([09acb0e](https://github.com/rahul9999xda/morphe-patches/commit/09acb0e713b416930b9cd4b7c7dd9f56ecabf409))
+
+### ✨ New Features
+
+* **telegram:** Add Disable Rich HTML Paste patch ([4878cde](https://github.com/rahul9999xda/morphe-patches/commit/4878cdef55bfd60950766e8b11591bdffb375477))
+
 ## [1.13.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.12.0...v1.13.0-dev1) (2026-10-17)
 ### 🐛 Bug Fixes
 
