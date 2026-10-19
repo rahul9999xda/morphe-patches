@@ -1109,3 +1109,42 @@ val TelegramPrivacyCrashlyticsLogFingerprint = Fingerprint(
     returnType = "V",
     parameters = listOf("Ljava/lang/String;"),
 )
+
+// ─── Rich HTML paste ──────────────────────────────────────────────────────────
+
+// Rich HTML clipboard paste handlers verified in clean APKs. These are separate
+// per-build/fork because R8 changes the input-view owner and superclass.
+// Telegram 13.0.3 build 71831: nf extends Components/lg.
+val ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/nf;",
+    name = "onTextContextMenuItem",
+    returnType = "Z",
+    parameters = listOf("I"),
+)
+
+// Telegram Web 13.0.3 build 71839: of extends Components/mg.
+val ChatActivityEnterViewRichHtmlPasteWeb1303Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/of;",
+    name = "onTextContextMenuItem",
+    returnType = "Z",
+    parameters = listOf("I"),
+)
+
+// Plus Messenger 13.0.2.0 build 22598: qh0 extends EditTextBoldCursor.
+val ChatActivityEnterViewRichHtmlPastePlus1302Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/qh0;",
+    name = "onTextContextMenuItem",
+    returnType = "Z",
+    parameters = listOf("I"),
+)
+
+// Legacy-only target retained for older Telegram/Web releases that still expose the
+// named helper. It is absent from the audited Telegram/Web 13.0.3 and Plus 13.0.2.0 APKs.
+// Do not use this as the current target; those builds use the onTextContextMenuItem
+// fingerprints above.
+val ChatActivityEnterViewHandleRichHtmlPasteFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
+    name = "handleRichHtmlPaste",
+    returnType = "Z",
+    parameters = listOf(),
+)
