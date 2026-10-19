@@ -1133,3 +1133,15 @@ val ChatActivityEnterViewRichHtmlPastePlus1302Fingerprint = Fingerprint(
     returnType = "Z",
     parameters = listOf("I"),
 )
+
+
+// Legacy-only target retained for older Telegram/Web releases that still expose the
+// named helper. It is absent from the audited Telegram/Web 13.0.3 and Plus 13.0.2.0 APKs.
+// Do not use this as the current target; those builds use the onTextContextMenuItem
+// fingerprints above.
+val ChatActivityEnterViewHandleRichHtmlPasteFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
+    name = "handleRichHtmlPaste",
+    returnType = "Z",
+    parameters = listOf(),
+)
