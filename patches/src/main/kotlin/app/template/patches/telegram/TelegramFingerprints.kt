@@ -11,14 +11,53 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 // ════════════════════════════════════════════════════════════════════════════════
+// ─── Auto-delete timer worker (current APK targets only) ──────────────────────
+// Re-audited against Telegram 13.0.3 build 71831, Telegram Web 13.0.3 build
+// 71839, and Plus Messenger 13.0.2.0 build 22598. The current Telegram/Web
+// worker is lambda$checkDeletingTask$85(Lz/f;Lz/f;)V; Plus uses static synthetic
+// J4(MessagesController, androidx.collection.k, androidx.collection.k). The
+// This fresh patch intentionally has no legacy Auto-Delete fingerprints.
+val MessagesControllerAutoDeleteTaskTelegramWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "lambda${'$'}checkDeletingTask${'$'}85",
+    returnType = "V",
+    parameters = listOf("Lz/f;", "Lz/f;"),
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/MessagesController;",
+            name = "deleteMessages",
+            returnType = "V",
+        ),
+    ),
+)
+
+val MessagesControllerAutoDeleteTaskPlusFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "J4",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/messenger/MessagesController;",
+        "Landroidx/collection/k;",
+        "Landroidx/collection/k;",
+    ),
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/MessagesController;",
+            name = "deleteMessages",
+            returnType = "V",
+        ),
+    ),
+)
+
 // Telegram shared fingerprints
-// Current rich-HTML paste audit baseline: Telegram 13.0.3 build 71831,
-// Telegram Web 13.0.3 build 71839, and Plus Messenger 13.0.2.0 build 22598.
-// Other sections may retain explicitly labelled 13.0.2 legacy fingerprints from earlier audits;
-// those version comments describe their original target and are not the current rich-HTML baseline.
-// A descriptor found only in a reference table is not considered patchable unless a local method
-// body exists. R8-renamed UI owners are kept distinct from legacy named fingerprints. AccessFlags
-// are omitted where APK variants differ.
+// Instruction-level audit baseline: Telegram 13.0.3 build 71831, Telegram Web
+// 13.0.3 build 71839, and Plus Messenger 13.0.2.0 build 22598. Legacy Telegram/Web
+// 13.0.2 builds 71751/71759 remain supported by separate descriptors below.
+// Current targets are distinguished from retained legacy descriptors. A descriptor found only
+// in a reference table is not considered a patchable method unless a local method body exists.
+// Several old UI owners are R8-renamed in these builds; their old named fingerprints stay below
+// for compatibility but must not be treated as current verified targets. AccessFlags are
+// omitted where APK variants differ.
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── Premium ──────────────────────────────────────────────────────────────────
@@ -47,7 +86,7 @@ val PlusUpdateButtonUpdateFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-// ─── Premium translation feature gates (Telegram, Web, and Plus 13.0.2) ───────
+// ─── Premium translation feature gates (Telegram/Web 13.0.3, Plus 13.0.2.0) ──
 // Instruction audit: both methods return translations_*_enabled != "disabled".
 // Their values are populated from app config; these hooks force the client-side
 // feature gates open. Server-side eligibility / translation service responses are
@@ -644,9 +683,10 @@ val SendScreenshotMessageSecretFingerprint = Fingerprint(
     ),
 )
 
-// ─── Stories hide-read receipt flow (Telegram/Web/Plus 13.0.2) ────────────────
-// Verified against the untouched Telegram 13.0.2 build 71751, Web 13.0.2 build
-// 71759, and Plus 13.0.2.0 build 22598. All three methods accept PeerStories,
+// ─── Stories hide-read receipt flow (Telegram/Web 13.0.3, Plus 13.0.2.0) ──────
+// Verified against Telegram 13.0.3 build 71831, Web 13.0.3 build 71839, and
+// Plus 13.0.2.0 build 22598. Separate legacy Telegram/Web owners remain listed.
+// All three current methods accept PeerStories,
 // StoryItem, boolean and return boolean. Their R8 names differ, but each body calls
 // NotificationsController.processReadStories(JI)V, constructs TL_stories_readStories,
 // and sends it through ConnectionsManager.sendRequest(...).
@@ -1028,8 +1068,8 @@ val AnalyticsTrackEventMapFingerprint = Fingerprint(
 // ════════════════════════════════════════════════════════════════════════════════
 
 /**
- * Instruction-audited privacy/telemetry fingerprints for Telegram 13.0.2,
- * Telegram Web 13.0.2 and Plus Messenger 13.0.2.0.
+ * Instruction-audited privacy/telemetry fingerprints for Telegram/Web 13.0.3
+ * and Plus Messenger 13.0.2.0.
  *
  * Telegram/Web do not bundle Firebase Analytics or Crashlytics in their standard
  * DEX files. Their ApplicationLoader App Center entry points are no-op stubs in
@@ -1108,6 +1148,8 @@ val TelegramPrivacyCrashlyticsLogFingerprint = Fingerprint(
     parameters = listOf("Ljava/lang/String;"),
 )
 
+// ─── Rich HTML paste ──────────────────────────────────────────────────────────
+
 // Rich HTML clipboard paste handlers verified in clean APKs. These are separate
 // per-build/fork because R8 changes the input-view owner and superclass.
 // Telegram 13.0.3 build 71831: nf extends Components/lg.
@@ -1133,7 +1175,6 @@ val ChatActivityEnterViewRichHtmlPastePlus1302Fingerprint = Fingerprint(
     returnType = "Z",
     parameters = listOf("I"),
 )
-
 
 // Legacy-only target retained for older Telegram/Web releases that still expose the
 // named helper. It is absent from the audited Telegram/Web 13.0.3 and Plus 13.0.2.0 APKs.
