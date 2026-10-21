@@ -1,3 +1,8 @@
+## [1.15.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.14.0...v1.15.0-dev1) (2026-10-21)
+### 🐛 Bug Fixes
+
+* **telegram:** Fix Telegram 13.1.0 fingerprints and compatibility targets ([8418b5d](https://github.com/rahul9999xda/morphe-patches/commit/8418b5de26afdc630b3aec5409b4c0d34b414468))
+* **telegram:** Fix Telegram 13.1.0 fingerprints and compatibility targets ([6b43c85](https://github.com/rahul9999xda/morphe-patches/commit/6b43c8598907f4988270a26e27a37d163c9ffbf1))
 ## [1.14.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.13.0...v1.14.0) (2026-10-19)
 ### 🐛 Bug Fixes
 

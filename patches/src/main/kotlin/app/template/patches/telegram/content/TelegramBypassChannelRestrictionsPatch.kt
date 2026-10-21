@@ -10,6 +10,7 @@ import app.template.patches.telegram.CheckCanOpenChat2Normal1303Fingerprint
 import app.template.patches.telegram.CheckCanOpenChat3Normal1303Fingerprint
 import app.template.patches.telegram.CheckCanOpenChat4Normal1303Fingerprint
 import app.template.patches.telegram.CheckCanOpenChat4Web1303Fingerprint
+import app.template.patches.telegram.CheckCanOpenChat4Web1310Fingerprint
 import app.template.patches.telegram.CheckSensitiveNormal1303Fingerprint
 import app.template.patches.telegram.ShowCantOpenAlertNormal1303Fingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
@@ -355,6 +356,7 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 checkCanOpenChat4NormalFingerprint,
                 CheckCanOpenChat4Normal1303Fingerprint,
                 CheckCanOpenChat4Web1303Fingerprint,
+                CheckCanOpenChat4Web1310Fingerprint,
                 checkCanOpenChat4PlusFingerprint,
                 checkCanOpenChat4PlusLegacyFingerprint,
                 methodName = "checkCanOpenChat/4",

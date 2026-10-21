@@ -390,6 +390,17 @@ val CheckCanOpenChat4Web1303Fingerprint = Fingerprint(
     ),
 )
 
+// Telegram Web 13.1.0 build 72299: ActionBar parameter is now r2 (not s2).
+// The callback remains Lje/e; in this build, confirmed from the supplied clean APK.
+val CheckCanOpenChat4Web1310Fingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "checkCanOpenChat",
+    returnType = "Z",
+    parameters = listOf(
+        "Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/r2;", "Lorg/telegram/messenger/MessageObject;", "Lje/e;",
+    ),
+)
+
 // ─── Anti-delete ──────────────────────────────────────────────────────────────
 
 val MarkMessagesAsDeletedFingerprint1 = Fingerprint(
@@ -680,6 +691,8 @@ val StoriesReadReceiptFlowFingerprint = Fingerprint(
             method.definingClass.toString() in setOf(
                 "Ltg/p5;", // Telegram 13.0.3 build 71831
                 "Lwg/m5;", // Telegram Web 13.0.3 build 71839
+                "Lug/s5;", // Telegram 13.1.0 build 72291
+                "Lxg/o5;", // Telegram Web 13.1.0 build 72299
                 "Lsg/q5;", // Telegram 13.0.2 legacy
                 "Lvg/o5;", // Telegram Web 13.0.2 legacy
                 "Lorg/telegram/ui/Stories/yc;", // Plus 13.0.2.0
