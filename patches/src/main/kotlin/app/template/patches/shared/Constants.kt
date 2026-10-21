@@ -7,7 +7,7 @@ import app.morphe.patcher.patch.Compatibility
 /**
  * Telegram-only compatibility definitions for this personal/testing repository.
  *
- * Targets are kept aligned with the current Telegram patch set.
+ * Telegram and Telegram Web target the audited 13.1.0 APKs. Telegram Plus remains on its separately audited version.
  */
 object Constants {
     val TELEGRAM_COMPATIBILITY = Compatibility(
@@ -15,7 +15,7 @@ object Constants {
         packageName = "org.telegram.messenger",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.0.3", versionCode = 71831))
+        targets = listOf(AppTarget(version = "13.1.0", versionCode = 72291))
     )
 
     val TELEGRAM_PLUS_COMPATIBILITY = Compatibility(
@@ -31,6 +31,6 @@ object Constants {
         packageName = "org.telegram.messenger.web",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.0.3", versionCode = 71839))
+        targets = listOf(AppTarget(version = "13.1.0", versionCode = 72299))
     )
 }

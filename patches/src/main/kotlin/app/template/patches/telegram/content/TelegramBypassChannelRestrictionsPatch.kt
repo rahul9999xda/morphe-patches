@@ -355,6 +355,7 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 checkCanOpenChat4NormalFingerprint,
                 CheckCanOpenChat4Normal1303Fingerprint,
                 CheckCanOpenChat4Web1303Fingerprint,
+                CheckCanOpenChat4Web1310Fingerprint,
                 checkCanOpenChat4PlusFingerprint,
                 checkCanOpenChat4PlusLegacyFingerprint,
                 methodName = "checkCanOpenChat/4",
