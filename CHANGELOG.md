@@ -1,3 +1,8 @@
+## [1.18.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.17.0...v1.18.0-dev1) (2026-11-01)
+### 🐛 Bug Fixes
+
+* **telegram:** improve anti-delete and disappearing media handling ([917f3bf](https://github.com/rahul9999xda/morphe-patches/commit/917f3bff5ba46410a52244b2cda3161184ec566b))
+
 ## [1.17.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.16.0...v1.17.0-dev1) (2026-10-28)
 ### 🐛 Bug Fixes
 
