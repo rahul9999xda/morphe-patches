@@ -6,6 +6,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.DeleteEphemeralMessageFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val isSecretMediaInstanceFingerprint = Fingerprint(
@@ -68,13 +69,15 @@ private val needDrawBluredPreviewFingerprint = Fingerprint(
  * are immediately invoked with Runnable.run(). Replacing those reads with
  * const/4 0 can cause a null Runnable invocation and break the viewer.
  *
- * Therefore this patch deliberately does NOT modify SecretMediaViewer. The
- * MessageObject-level gates below are the only verified hooks retained.
+ * Therefore this patch deliberately does NOT modify SecretMediaViewer. In addition
+ * to the MessageObject-level gates, it now intercepts the audited ephemeral-expiry
+ * handler. The only call sites in the three supplied APKs are the timer helper;
+ * normal manual deletion goes through MessagesController.deleteMessages(...).
  */
 @Suppress("unused")
 val telegramAntiDisappearingMediaPatch = bytecodePatch(
     name = "Anti-disappearing media",
-    description = "Keeps view-once photos, videos and voice messages viewable indefinitely without modifying SecretMediaViewer lifecycle callbacks.",
+    description = "Prevents automatic ephemeral expiry deletion and disables view-once media classification gates without modifying SecretMediaViewer lifecycle callbacks.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -85,6 +88,10 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
+        // The expiry timer helper is the only DEX caller of this exact method in each
+        // supplied APK. Manual deletion follows deleteMessages(...) and is not patched.
+        DeleteEphemeralMessageFingerprint.method.addInstructions(0, "return-void")
+
         listOf(
             isSecretMediaInstanceFingerprint,
             isSecretMediaStaticFingerprint,

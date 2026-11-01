@@ -11,10 +11,7 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.DeleteMessagesByPushFingerprint
-import app.template.patches.telegram.MarkMessagesAsDeletedFingerprint2
-import app.template.patches.telegram.NotificationsControllerRemoveDeletedMessagesFingerprint
-import app.template.patches.telegram.NotificationsControllerRemoveDeletedMessagesPlusFingerprint
-import app.template.patches.telegram.NotificationsControllerRemoveDeletedMessagesPlusLegacyFingerprint
+import app.template.patches.telegram.MessagesControllerProcessUpdateArrayMarkDeletedFingerprint
 import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
@@ -80,7 +77,7 @@ private val deletedMessageUiLegacyFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramAntiDeletePatch = bytecodePatch(
     name = "Anti-delete messages",
-    description = "Prevents messages deleted by other users from being removed locally.",
+    description = "Prevents remote deletion updates from removing local messages while preserving user-initiated deletion.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -99,17 +96,29 @@ val telegramAntiDeletePatch = bytecodePatch(
 
         deleteMessagesByPushMethod.addInstructions(0, "return-void")
 
-        MarkMessagesAsDeletedFingerprint2.method.addInstructions(
-            0,
-            """
-                if-nez p4, :morphe_anti_delete_continue_original
-                new-instance v0, Ljava/util/ArrayList;
-                invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
-                return-object v0
-                :morphe_anti_delete_continue_original
-                nop
-            """,
-        )
+        // Do not globally intercept MessagesStorage.markMessagesAsDeleted: it is also
+        // used by local/user-initiated deletion flows. The incoming server-update call
+        // below is the narrow hook for remote deletion events.
+
+
+        // processUpdateArray uses the asynchronous markMessagesAsDeleted path (p4 = true)
+        // for incoming server deletion updates. Do not globally block that boolean branch:
+        // user-initiated deletes also use it. Instead, remove only the audited call site in
+        // processUpdateArray so remote delete updates never reach local storage deletion.
+        val incomingDeleteUpdateMatches =
+            MessagesControllerProcessUpdateArrayMarkDeletedFingerprint.matchAllOrNull().orEmpty()
+        require(incomingDeleteUpdateMatches.size == 1) {
+            "Expected exactly one incoming-delete update path, found ${incomingDeleteUpdateMatches.size}"
+        }
+        incomingDeleteUpdateMatches.forEach { match ->
+            val callIndices = match.instructionMatches.map { it.index }.distinct().reversed()
+            require(callIndices.size == 1) {
+                "Expected exactly one markMessagesAsDeleted call in processUpdateArray, found ${callIndices.size}"
+            }
+            callIndices.forEach { index ->
+                match.method.replaceInstruction(index, "nop")
+            }
+        }
 
         val deletedMessageUiMatches = deletedMessageUiFingerprint.matchAllOrNull().orEmpty()
         require(deletedMessageUiMatches.size == 1) {
@@ -127,16 +136,8 @@ val telegramAntiDeletePatch = bytecodePatch(
                 }
         }
 
-        val removeDeletedMessagesMethod =
-            NotificationsControllerRemoveDeletedMessagesFingerprint.methodOrNull
-                ?: NotificationsControllerRemoveDeletedMessagesPlusFingerprint.methodOrNull
-                ?: NotificationsControllerRemoveDeletedMessagesPlusLegacyFingerprint.methodOrNull
-
-        requireNotNull(removeDeletedMessagesMethod) {
-            "Failed to match removeDeletedMessagesFromNotifications for Telegram/Web/Plus"
-        }.addInstructions(
-            0,
-            "return-void",
-        )
+        // Do not globally suppress removeDeletedMessagesFromNotifications: doing so
+        // can leave notifications for messages the user deliberately deleted. The
+        // incoming-update UI worker above is the narrowly scoped remote-delete hook.
     }
 }

@@ -449,6 +449,48 @@ val MarkMessagesAsDeletedFingerprint2 = Fingerprint(
     parameters = listOf("J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I"),
 )
 
+// Incoming deletion updates are processed through this exact method in Telegram/Web 13.1.1
+// and Plus 13.1.1.0. Its body has one call to MessagesStorage.markMessagesAsDeleted(...).
+// The first boolean passed at that call is true (async path), so the storage-level
+// synchronous guard below cannot stop this remote-update path on its own.
+val MessagesControllerProcessUpdateArrayMarkDeletedFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "processUpdateArray",
+    returnType = "Z",
+    parameters = listOf(
+        "Ljava/util/ArrayList;",
+        "Ljava/util/ArrayList;",
+        "Ljava/util/ArrayList;",
+        "Z",
+        "I",
+    ),
+    filters = listOf(
+        methodCall(
+            definingClass = "Lorg/telegram/messenger/MessagesStorage;",
+            name = "markMessagesAsDeleted",
+            returnType = "Ljava/util/ArrayList;",
+        ),
+    ),
+    custom = { method, _ ->
+        val instructions = method.implementation?.instructions?.toList() ?: emptyList()
+        val calls = instructions.mapNotNull { instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            if (
+                reference?.definingClass == "Lorg/telegram/messenger/MessagesStorage;" &&
+                reference.name == "markMessagesAsDeleted" &&
+                reference.returnType == "Ljava/util/ArrayList;" &&
+                reference.parameterTypes.map { it.toString() } == listOf(
+                    "J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I",
+                )
+            ) reference else null
+        }
+        method.name == "processUpdateArray" &&
+            method.parameterTypes.map { it.toString() } == listOf(
+                "Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Z", "I",
+            ) && calls.size == 1
+    },
+)
+
 // Telegram/Web body signatures are confirmed. The Plus descriptor is reference-level only in
 // the supplied APK; omit accessFlags but do not treat this as a confirmed Plus patch target.
 val DeleteMessagesByPushFingerprint = Fingerprint(
@@ -505,6 +547,18 @@ val NotificationsControllerRemoveDeletedMessagesPlusLegacyFingerprint = Fingerpr
 )
 
 // ─── Anti-disappearing media ──────────────────────────────────────────────────
+
+// The ephemeral-expiry worker calls this method to remove an expired/view-once
+// message locally and send its deletion request. DEX call-site audit found the
+// method is reached from the ephemeral timer helper (one caller per current APK);
+// normal user-initiated deletion uses MessagesController.deleteMessages instead.
+val DeleteEphemeralMessageFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/MessagesController;",
+    name = "deleteEphemeralMessage",
+    returnType = "V",
+    parameters = listOf("J", "I", "Lorg/telegram/messenger/MessageObject;"),
+)
+
 
 val IsSecretMediaInstanceFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessageObject;",
