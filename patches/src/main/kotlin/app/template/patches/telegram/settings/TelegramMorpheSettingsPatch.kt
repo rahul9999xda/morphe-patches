@@ -45,13 +45,11 @@ val telegramMorpheSettingsPatch = bytecodePatch(
             sget-object v0, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
             invoke-static {v0}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
             move-result-object v0
-            new-instance v2, Lorg/telegram/ui/Components/r71;
-            const/4 v3, -0x4
-            invoke-direct {v2, v3}, Lorg/telegram/ui/Components/r71;-><init>(I)V
-            iput-object v0, v2, Lorg/telegram/ui/Components/r71;->c:Landroid/view/View;
+            invoke-static {v0}, Lorg/telegram/ui/Components/g71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/g71;
+            move-result-object v2
             invoke-static {v0}, Lapp/template/extension/telegram/MorpheSettingsEntry;->getRowHeightPx(Landroid/content/Context;)I
             move-result v3
-            iput v3, v2, Lorg/telegram/ui/Components/r71;->z:I
+            iput v3, v2, Lorg/telegram/ui/Components/g71;->z:I
             invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
         """.trimIndent()
 
