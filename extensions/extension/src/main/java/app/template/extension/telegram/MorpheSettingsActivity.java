@@ -212,11 +212,7 @@ public final class MorpheSettingsActivity extends Activity {
                 try {
                     field.setAccessible(true);
                     Object value = field.get(controller);
-                    if (value instanceof Iterable) {
-                        for (Object item : (Iterable<?>) value) addDialogChoice(item, controllerClass, controller, found);
-                    } else if (value instanceof java.util.Map) {
-                        for (Object item : ((java.util.Map<?, ?>) value).values()) addDialogChoice(item, controllerClass, controller, found);
-                    }
+                    collectDialogCandidates(value, controllerClass, controller, found);
                 } catch (Throwable ignored) { }
             }
             type = type.getSuperclass();
@@ -226,18 +222,78 @@ public final class MorpheSettingsActivity extends Activity {
         return result;
     }
 
+    /** Handles Telegram's ArrayList/Map and Android SparseArray/LongSparseArray containers. */
+    private void collectDialogCandidates(Object value, Class<?> controllerClass, Object controller,
+                                         java.util.Map<Long, ChatChoice> result) {
+        if (value == null) return;
+        try {
+            if (value instanceof Iterable) {
+                for (Object item : (Iterable<?>) value) addDialogChoice(item, controllerClass, controller, result);
+                return;
+            }
+            if (value instanceof java.util.Map) {
+                for (Object item : ((java.util.Map<?, ?>) value).values()) addDialogChoice(item, controllerClass, controller, result);
+                return;
+            }
+            if (value.getClass().isArray()) {
+                int n = java.lang.reflect.Array.getLength(value);
+                for (int i = 0; i < n; i++) addDialogChoice(java.lang.reflect.Array.get(value, i), controllerClass, controller, result);
+                return;
+            }
+            // android.util.LongSparseArray, SparseArray and Telegram's sparse containers.
+            java.lang.reflect.Method size = findNoArgMethod(value.getClass(), "size");
+            java.lang.reflect.Method valueAt = findIndexedMethod(value.getClass(), "valueAt");
+            if (size != null && valueAt != null) {
+                size.setAccessible(true);
+                valueAt.setAccessible(true);
+                int count = ((Number) size.invoke(value)).intValue();
+                for (int i = 0; i < count; i++) addDialogChoice(valueAt.invoke(value, i), controllerClass, controller, result);
+            }
+        } catch (Throwable ignored) { }
+    }
+
+    private java.lang.reflect.Method findNoArgMethod(Class<?> type, String name) {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            try { return c.getDeclaredMethod(name); } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
+    private java.lang.reflect.Method findIndexedMethod(Class<?> type, String name) {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            for (java.lang.reflect.Method method : c.getDeclaredMethods()) {
+                if (method.getName().equals(name) && method.getParameterTypes().length == 1
+                        && method.getParameterTypes()[0] == int.class) return method;
+            }
+        }
+        return null;
+    }
+
     private void addDialogChoice(Object dialog, Class<?> controllerClass, Object controller,
                                  java.util.Map<Long, ChatChoice> result) {
         if (dialog == null) return;
         try {
-            String className = dialog.getClass().getName();
-            if (!className.contains("TLRPC$Dialog") && !className.endsWith(".Dialog")) return;
-            java.lang.reflect.Field idField = dialog.getClass().getField("id");
-            if (idField.getType() != long.class && idField.getType() != Long.class) return;
-            long id = ((Number) idField.get(dialog)).longValue();
+            // Telegram's concrete TL object is commonly TLRPC$TL_dialog, not TLRPC$Dialog.
+            // Test assignability against the base type instead of a case-sensitive class-name substring.
+            ClassLoader cl = getClassLoader();
+            Class<?> dialogBase = Class.forName("org.telegram.tgnet.TLRPC$Dialog", false, cl);
+            if (!dialogBase.isAssignableFrom(dialog.getClass())) return;
+            java.lang.reflect.Field idField = findField(dialog.getClass(), "id");
+            if (idField == null) return;
+            idField.setAccessible(true);
+            Object rawId = idField.get(dialog);
+            if (!(rawId instanceof Number)) return;
+            long id = ((Number) rawId).longValue();
             if (id == 0 || result.containsKey(id)) return;
             result.put(id, new ChatChoice(id, resolveTitle(controllerClass, controller, id)));
         } catch (Throwable ignored) { }
+    }
+
+    private java.lang.reflect.Field findField(Class<?> type, String name) {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            try { return c.getDeclaredField(name); } catch (Throwable ignored) { }
+        }
+        return null;
     }
 
     private String resolveTitle(Class<?> mc, Object controller, long dialogId) {
