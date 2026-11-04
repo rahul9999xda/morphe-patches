@@ -10,17 +10,25 @@ public final class ForwardingMessage {
     private final boolean secretChat;
     private final boolean serviceMessage;
     private final boolean protectedContent;
+    private final boolean forwardable;
     private final Object nativeMessage;
 
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
                              boolean outgoing, boolean secretChat, boolean serviceMessage) {
         this(accountId, sourceChatId, messageId, text, outgoing, secretChat,
-                serviceMessage, false, null);
+                serviceMessage, false, true, null);
     }
 
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
                              boolean outgoing, boolean secretChat, boolean serviceMessage,
                              boolean protectedContent, Object nativeMessage) {
+        this(accountId, sourceChatId, messageId, text, outgoing, secretChat, serviceMessage,
+                protectedContent, true, nativeMessage);
+    }
+
+    public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
+                             boolean outgoing, boolean secretChat, boolean serviceMessage,
+                             boolean protectedContent, boolean forwardable, Object nativeMessage) {
         this.accountId = accountId;
         this.sourceChatId = sourceChatId;
         this.messageId = messageId;
@@ -29,6 +37,7 @@ public final class ForwardingMessage {
         this.secretChat = secretChat;
         this.serviceMessage = serviceMessage;
         this.protectedContent = protectedContent;
+        this.forwardable = forwardable;
         this.nativeMessage = nativeMessage;
     }
 
@@ -40,6 +49,7 @@ public final class ForwardingMessage {
     public boolean isSecretChat() { return secretChat; }
     public boolean isServiceMessage() { return serviceMessage; }
     public boolean isProtectedContent() { return protectedContent; }
+    public boolean canForward() { return forwardable && !protectedContent; }
     /** Opaque original Telegram object; only a version adapter may interpret it. */
     public Object getNativeMessage() { return nativeMessage; }
 }

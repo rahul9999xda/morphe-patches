@@ -37,24 +37,7 @@ public final class MorpheForwardingRuntime {
 
     private MorpheForwardingRuntime() { }
 
-    /**
-     * NotificationCenter.addObserver() is main-thread-only in Telegram 13.1.1.
-     * postInitApplication() can be reached from startup paths where the caller
-     * thread is not guaranteed to be Telegram's application thread, so always
-     * marshal observer registration onto the main looper.
-     */
-    public static void install() {
-        if (installed) return;
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            installOnMainThread();
-        } else {
-            MAIN.post(new Runnable() {
-                @Override public void run() { installOnMainThread(); }
-            });
-        }
-    }
-
-    private static synchronized void installOnMainThread() {
+    public static synchronized void install() {
         if (installed) return;
         try {
             Context context = applicationContext();
@@ -65,7 +48,6 @@ public final class MorpheForwardingRuntime {
             coordinator.start();
 
             ClassLoader loader = context.getClassLoader();
-            if (loader == null) loader = MorpheForwardingRuntime.class.getClassLoader();
             Class<?> notificationClass = Class.forName(NOTIFICATION_CENTER, false, loader);
             Class<?> delegateClass = Class.forName(NOTIFICATION_CENTER + "$NotificationCenterDelegate", false, loader);
             int eventId = notificationClass.getField("didReceiveNewMessages").getInt(null);
@@ -84,17 +66,13 @@ public final class MorpheForwardingRuntime {
             installed = true;
         } catch (Throwable error) {
             // Keep Telegram startup safe if a future fork changes an internal API.
-            // Do not mark installed: a later explicit retry may register observers.
             installed = false;
-            android.util.Log.e("MorpheForwarding", "Unable to register Telegram message observers", error);
         }
     }
 
     private static Context applicationContext() {
         try {
-            ClassLoader appLoader = Thread.currentThread().getContextClassLoader();
-            if (appLoader == null) appLoader = MorpheForwardingRuntime.class.getClassLoader();
-            Class<?> loader = Class.forName(APPLICATION_LOADER, false, appLoader);
+            Class<?> loader = Class.forName(APPLICATION_LOADER);
             Field field = loader.getField("applicationContext");
             Object value = field.get(null);
             return value instanceof Context ? (Context) value : null;
@@ -137,9 +115,7 @@ public final class MorpheForwardingRuntime {
                     ForwardingMessage event = toForwardingMessage(accountId, dialogId, message);
                     if (event != null && coordinator != null) coordinator.onIncomingMessage(event);
                 }
-            } catch (Throwable error) {
-                android.util.Log.e("MorpheForwarding", "Failed to process Telegram new-message event", error);
-            }
+            } catch (Throwable ignored) { }
             return null;
         }
     }
@@ -153,9 +129,9 @@ public final class MorpheForwardingRuntime {
             Class<?> ownerType = owner.getClass();
             if (ownerType.getField("out").getBoolean(owner)) return null;
             if (ownerType.getField("action").get(owner) != null) return null; // service messages
-            if (ownerType.getField("noforwards").getBoolean(owner)) return null;
+            boolean protectedContent = ownerType.getField("noforwards").getBoolean(owner);
             if (isSecretDialog(dialogId)) return null;
-            if (!Boolean.TRUE.equals(type.getMethod("canForwardMessage").invoke(messageObject))) return null;
+            boolean forwardable = Boolean.TRUE.equals(type.getMethod("canForwardMessage").invoke(messageObject));
             int messageId = ((Number) type.getMethod("getId").invoke(messageObject)).intValue();
             String text = "";
             try {
@@ -166,12 +142,13 @@ public final class MorpheForwardingRuntime {
                 Object value = ownerType.getField("message").get(owner);
                 if (value != null) text = String.valueOf(value);
             }
+            // This engine currently automates text only. Forward eligibility is evaluated
+            // per rule; a protected text can still enter COPY mode when permitted by the
+            // separately installed Telegram content-restriction patch.
+            if (text.trim().isEmpty()) return null;
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, false, messageObject);
-        } catch (Throwable error) {
-            android.util.Log.e("MorpheForwarding", "Unable to adapt incoming Telegram message", error);
-            return null;
-        }
+                    false, false, false, protectedContent, forwardable, messageObject);
+        } catch (Throwable ignored) { return null; }
     }
 
     private static boolean isSecretDialog(long dialogId) {
@@ -196,6 +173,9 @@ public final class MorpheForwardingRuntime {
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(messageObject));
                         Object result = method.invoke(helper, messages, destinationChatId,
                                 false, false, false, 0, 0, null, -1, 0L, 0L, null);
+                        if (!(result instanceof Number) || ((Number) result).intValue() == 0) {
+                            throw new IllegalStateException("Telegram rejected the forward request");
+                        }
                         if (callback != null) callback.onSuccess();
                     } catch (Throwable error) {
                         if (callback != null) callback.onFailure(unwrap(error));
@@ -211,13 +191,23 @@ public final class MorpheForwardingRuntime {
                     try {
                         Object messageObject = source.getNativeMessage();
                         if (messageObject == null) throw new IllegalStateException("Original Telegram message is unavailable");
+                        if (source.getText().trim().isEmpty()) throw new IllegalArgumentException("Only text messages can be copied");
                         ClassLoader loader = messageObject.getClass().getClassLoader();
                         Class<?> helperClass = Class.forName("org.telegram.messenger.SendMessagesHelper", false, loader);
                         Class<?> paramsClass = Class.forName("org.telegram.messenger.SendMessagesHelper$SendMessageParams", false, loader);
-                        Object params = paramsClass.getMethod("of", messageObject.getClass()).invoke(null, messageObject);
-                        paramsClass.getField("peer").setLong(params, destinationChatId);
+                        // Construct a fresh text message. Do not clone the source MessageObject,
+                        // which could carry protected-media/forward metadata into the destination.
+                        Object params = paramsClass.getMethod("of", String.class, long.class)
+                                .invoke(null, source.getText(), destinationChatId);
+                        Object owner = messageObject.getClass().getField("messageOwner").get(messageObject);
+                        Object entities = owner.getClass().getField("entities").get(owner);
+                        if (entities instanceof ArrayList) {
+                            paramsClass.getField("entities").set(params, new ArrayList<>((ArrayList<?>) entities));
+                        }
                         Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         helperClass.getMethod("sendMessage", paramsClass).invoke(helper, params);
+                        // The params overload returns void: success here means accepted by
+                        // Telegram's local send pipeline, not confirmed server delivery.
                         if (callback != null) callback.onSuccess();
                     } catch (Throwable error) {
                         if (callback != null) callback.onFailure(unwrap(error));

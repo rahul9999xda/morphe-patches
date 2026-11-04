@@ -33,7 +33,7 @@ public final class ForwardingCoordinator {
 
     public void onIncomingMessage(final ForwardingMessage message) {
         if (!running || message == null || message.isOutgoing() || message.isSecretChat()
-                || message.isServiceMessage() || message.isProtectedContent()) return;
+                || message.isServiceMessage()) return;
         executor.execute(new Runnable() {
             @Override public void run() {
                 if (!running) return;
