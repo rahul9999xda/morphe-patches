@@ -11,6 +11,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /** Builds the Morphe row inserted into Telegram's existing Settings list. */
 public final class MorpheSettingsEntry {
@@ -78,13 +79,15 @@ public final class MorpheSettingsEntry {
                     Intent intent = new Intent(appContext, MorpheSettingsActivity.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     appContext.startActivity(intent);
-                } catch (Throwable ignored) { }
+                } catch (android.content.ActivityNotFoundException missingActivity) {
+                    Toast.makeText(appContext,
+                            "Morphe Settings activity is not registered in this build",
+                            Toast.LENGTH_LONG).show();
+                }
             }
         });
         return row;
     }
-
-    public static int getRowHeightPx(Context context) { return dp(context, 72); }
 
     private static int dp(Context context, float value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
