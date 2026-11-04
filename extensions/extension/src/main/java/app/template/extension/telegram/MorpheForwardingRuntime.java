@@ -37,7 +37,24 @@ public final class MorpheForwardingRuntime {
 
     private MorpheForwardingRuntime() { }
 
-    public static synchronized void install() {
+    /**
+     * NotificationCenter.addObserver() is main-thread-only in Telegram 13.1.1.
+     * postInitApplication() can be reached from startup paths where the caller
+     * thread is not guaranteed to be Telegram's application thread, so always
+     * marshal observer registration onto the main looper.
+     */
+    public static void install() {
+        if (installed) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            installOnMainThread();
+        } else {
+            MAIN.post(new Runnable() {
+                @Override public void run() { installOnMainThread(); }
+            });
+        }
+    }
+
+    private static synchronized void installOnMainThread() {
         if (installed) return;
         try {
             Context context = applicationContext();
@@ -48,6 +65,7 @@ public final class MorpheForwardingRuntime {
             coordinator.start();
 
             ClassLoader loader = context.getClassLoader();
+            if (loader == null) loader = MorpheForwardingRuntime.class.getClassLoader();
             Class<?> notificationClass = Class.forName(NOTIFICATION_CENTER, false, loader);
             Class<?> delegateClass = Class.forName(NOTIFICATION_CENTER + "$NotificationCenterDelegate", false, loader);
             int eventId = notificationClass.getField("didReceiveNewMessages").getInt(null);
@@ -66,13 +84,17 @@ public final class MorpheForwardingRuntime {
             installed = true;
         } catch (Throwable error) {
             // Keep Telegram startup safe if a future fork changes an internal API.
+            // Do not mark installed: a later explicit retry may register observers.
             installed = false;
+            android.util.Log.e("MorpheForwarding", "Unable to register Telegram message observers", error);
         }
     }
 
     private static Context applicationContext() {
         try {
-            Class<?> loader = Class.forName(APPLICATION_LOADER);
+            ClassLoader appLoader = Thread.currentThread().getContextClassLoader();
+            if (appLoader == null) appLoader = MorpheForwardingRuntime.class.getClassLoader();
+            Class<?> loader = Class.forName(APPLICATION_LOADER, false, appLoader);
             Field field = loader.getField("applicationContext");
             Object value = field.get(null);
             return value instanceof Context ? (Context) value : null;
@@ -115,7 +137,9 @@ public final class MorpheForwardingRuntime {
                     ForwardingMessage event = toForwardingMessage(accountId, dialogId, message);
                     if (event != null && coordinator != null) coordinator.onIncomingMessage(event);
                 }
-            } catch (Throwable ignored) { }
+            } catch (Throwable error) {
+                android.util.Log.e("MorpheForwarding", "Failed to process Telegram new-message event", error);
+            }
             return null;
         }
     }
@@ -144,7 +168,10 @@ public final class MorpheForwardingRuntime {
             }
             return new ForwardingMessage(accountId, dialogId, messageId, text,
                     false, false, false, false, messageObject);
-        } catch (Throwable ignored) { return null; }
+        } catch (Throwable error) {
+            android.util.Log.e("MorpheForwarding", "Unable to adapt incoming Telegram message", error);
+            return null;
+        }
     }
 
     private static boolean isSecretDialog(long dialogId) {
