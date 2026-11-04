@@ -189,30 +189,55 @@ public final class MorpheSettingsActivity extends Activity {
                         target.setText(ids.toString());
                     }).show();
         } catch (Throwable e) {
-            Toast.makeText(this, "Unable to read Telegram dialogs: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Could not load Telegram chats. Open the Chats screen once, then retry. Details: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
         }
     }
 
     private List<ChatChoice> readTelegramDialogs() throws Exception {
         ClassLoader cl = getClassLoader();
-        Class<?> uc = Class.forName("org.telegram.messenger.UserConfig", false, cl);
+        Class<?> userConfig = Class.forName("org.telegram.messenger.UserConfig", false, cl);
         int account = 0;
-        try { account = uc.getField("selectedAccount").getInt(null); } catch (Throwable ignored) { }
-        Class<?> mc = Class.forName("org.telegram.messenger.MessagesController", false, cl);
-        Object controller = mc.getMethod("getInstance", int.class).invoke(null, account);
-        Object raw = mc.getField("dialogs").get(controller);
-        if (!(raw instanceof List)) return new ArrayList<>();
-        ArrayList<ChatChoice> result = new ArrayList<>();
-        Set<Long> seen = new java.util.HashSet<>();
-        for (Object dialog : (List<?>) raw) {
-            if (dialog == null) continue;
-            long id;
-            try { id = dialog.getClass().getField("id").getLong(dialog); } catch (Throwable ignored) { continue; }
-            if (id == 0 || !seen.add(id)) continue;
-            result.add(new ChatChoice(id, resolveTitle(mc, controller, id)));
+        try { account = userConfig.getField("selectedAccount").getInt(null); } catch (Throwable ignored) { }
+
+        Class<?> controllerClass = Class.forName("org.telegram.messenger.MessagesController", false, cl);
+        Object controller = controllerClass.getMethod("getInstance", int.class).invoke(null, account);
+        if (controller == null) throw new IllegalStateException("Telegram MessagesController is unavailable");
+
+        // Do not assume a public field named "dialogs": Telegram forks move/rename this collection.
+        java.util.LinkedHashMap<Long, ChatChoice> found = new java.util.LinkedHashMap<>();
+        Class<?> type = controller.getClass();
+        while (type != null && type != Object.class) {
+            for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(controller);
+                    if (value instanceof Iterable) {
+                        for (Object item : (Iterable<?>) value) addDialogChoice(item, controllerClass, controller, found);
+                    } else if (value instanceof java.util.Map) {
+                        for (Object item : ((java.util.Map<?, ?>) value).values()) addDialogChoice(item, controllerClass, controller, found);
+                    }
+                } catch (Throwable ignored) { }
+            }
+            type = type.getSuperclass();
         }
-        java.util.Collections.sort(result, (a,b) -> a.title.compareToIgnoreCase(b.title));
+        ArrayList<ChatChoice> result = new ArrayList<>(found.values());
+        java.util.Collections.sort(result, (a, b) -> a.title.compareToIgnoreCase(b.title));
         return result;
+    }
+
+    private void addDialogChoice(Object dialog, Class<?> controllerClass, Object controller,
+                                 java.util.Map<Long, ChatChoice> result) {
+        if (dialog == null) return;
+        try {
+            String className = dialog.getClass().getName();
+            if (!className.contains("TLRPC$Dialog") && !className.endsWith(".Dialog")) return;
+            java.lang.reflect.Field idField = dialog.getClass().getField("id");
+            if (idField.getType() != long.class && idField.getType() != Long.class) return;
+            long id = ((Number) idField.get(dialog)).longValue();
+            if (id == 0 || result.containsKey(id)) return;
+            result.put(id, new ChatChoice(id, resolveTitle(controllerClass, controller, id)));
+        } catch (Throwable ignored) { }
     }
 
     private String resolveTitle(Class<?> mc, Object controller, long dialogId) {
