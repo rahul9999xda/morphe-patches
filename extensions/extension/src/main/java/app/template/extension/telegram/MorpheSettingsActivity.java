@@ -1,6 +1,7 @@
 package app.template.extension.telegram;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -97,8 +98,14 @@ public final class MorpheSettingsActivity extends Activity {
         addSectionTitle("Create forwarding rule", primary);
         LinearLayout form = card(surface);
         nameInput = addInput(form, "Rule name", "e.g. News forwarding");
-        sourceInput = addInput(form, "Source chat IDs", "Comma-separated IDs, e.g. -1001234567890, 123456789");
-        destinationInput = addInput(form, "Destination chat IDs", "Comma-separated IDs");
+        sourceInput = addInput(form, "Source chats", "Choose chats or edit dialog IDs");
+        Button pickSources = button("Choose source chats");
+        form.addView(pickSources, params(-1, dp(44)));
+        pickSources.setOnClickListener(v -> showChatPicker(true));
+        destinationInput = addInput(form, "Destination chats", "Choose chats or edit dialog IDs");
+        Button pickDestinations = button("Choose destination chats");
+        form.addView(pickDestinations, params(-1, dp(44)));
+        pickDestinations.setOnClickListener(v -> showChatPicker(false));
         includeInput = addInput(form, "Include keywords (optional)", "Comma-separated words or phrases");
         excludeInput = addInput(form, "Exclude keywords (optional)", "Comma-separated words or phrases");
 
@@ -140,12 +147,96 @@ public final class MorpheSettingsActivity extends Activity {
         content.addView(rulesContainer, rulesParams);
 
         TextView note = new TextView(this);
-        note.setText("Chat IDs are Telegram dialog IDs. User chats are usually positive; groups and channels are usually negative. Secret chats and protected/no-forward messages are excluded.");
+        note.setText("Choose source and destination chats from Telegram dialogs, or enter dialog IDs manually. Secret chats and protected/no-forward messages are excluded.");
         note.setTextSize(12);
         note.setTextColor(secondary);
         LinearLayout.LayoutParams noteParams = params(-1, -2);
         noteParams.topMargin = dp(18);
         content.addView(note, noteParams);
+    }
+
+
+    /** Reads the currently loaded Telegram dialogs from the active native account. */
+    private void showChatPicker(boolean source) {
+        try {
+            List<ChatChoice> choices = readTelegramDialogs();
+            if (choices.isEmpty()) {
+                Toast.makeText(this, "No Telegram dialogs are loaded. Open Chats and retry.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            EditText target = source ? sourceInput : destinationInput;
+            Set<Long> selected = parseIds(text(target));
+            String[] labels = new String[choices.size()];
+            boolean[] checked = new boolean[choices.size()];
+            for (int i = 0; i < choices.size(); i++) {
+                ChatChoice c = choices.get(i);
+                labels[i] = c.title + "  ·  " + c.id;
+                checked[i] = selected.contains(c.id);
+            }
+            new AlertDialog.Builder(this)
+                    .setTitle(source ? "Choose source chats" : "Choose destination chats")
+                    .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> {
+                        if (isChecked) selected.add(choices.get(which).id);
+                        else selected.remove(choices.get(which).id);
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Apply", (d, which) -> {
+                        StringBuilder ids = new StringBuilder();
+                        for (Long id : selected) {
+                            if (ids.length() > 0) ids.append(", ");
+                            ids.append(id);
+                        }
+                        target.setText(ids.toString());
+                    }).show();
+        } catch (Throwable e) {
+            Toast.makeText(this, "Unable to read Telegram dialogs: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private List<ChatChoice> readTelegramDialogs() throws Exception {
+        ClassLoader cl = getClassLoader();
+        Class<?> uc = Class.forName("org.telegram.messenger.UserConfig", false, cl);
+        int account = 0;
+        try { account = uc.getField("selectedAccount").getInt(null); } catch (Throwable ignored) { }
+        Class<?> mc = Class.forName("org.telegram.messenger.MessagesController", false, cl);
+        Object controller = mc.getMethod("getInstance", int.class).invoke(null, account);
+        Object raw = mc.getField("dialogs").get(controller);
+        if (!(raw instanceof List)) return new ArrayList<>();
+        ArrayList<ChatChoice> result = new ArrayList<>();
+        Set<Long> seen = new java.util.HashSet<>();
+        for (Object dialog : (List<?>) raw) {
+            if (dialog == null) continue;
+            long id;
+            try { id = dialog.getClass().getField("id").getLong(dialog); } catch (Throwable ignored) { continue; }
+            if (id == 0 || !seen.add(id)) continue;
+            result.add(new ChatChoice(id, resolveTitle(mc, controller, id)));
+        }
+        java.util.Collections.sort(result, (a,b) -> a.title.compareToIgnoreCase(b.title));
+        return result;
+    }
+
+    private String resolveTitle(Class<?> mc, Object controller, long dialogId) {
+        try {
+            if (dialogId < 0) {
+                long decoded = dialogId <= -1000000000000L ? -dialogId - 1000000000000L : -dialogId;
+                Object chat = mc.getMethod("getChat", int.class).invoke(controller, (int) decoded);
+                if (chat != null) return String.valueOf(chat.getClass().getField("title").get(chat));
+            } else {
+                Object user = mc.getMethod("getUser", long.class).invoke(controller, dialogId);
+                if (user != null) {
+                    String first = String.valueOf(user.getClass().getField("first_name").get(user));
+                    String last = String.valueOf(user.getClass().getField("last_name").get(user));
+                    String name = (first + " " + last).trim();
+                    if (!name.isEmpty()) return name;
+                }
+            }
+        } catch (Throwable ignored) { }
+        return "Chat " + dialogId;
+    }
+
+    private static final class ChatChoice {
+        final long id; final String title;
+        ChatChoice(long id, String title) { this.id = id; this.title = title; }
     }
 
     private void saveRule() {
