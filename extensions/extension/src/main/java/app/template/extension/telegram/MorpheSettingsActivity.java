@@ -170,7 +170,7 @@ public final class MorpheSettingsActivity extends Activity {
             boolean[] checked = new boolean[choices.size()];
             for (int i = 0; i < choices.size(); i++) {
                 ChatChoice c = choices.get(i);
-                labels[i] = c.title + "  ·  " + c.id;
+                labels[i] = c.icon + "  " + c.title + "  ·  " + c.id;
                 checked[i] = selected.contains(c.id);
             }
             new AlertDialog.Builder(this)
@@ -285,7 +285,8 @@ public final class MorpheSettingsActivity extends Activity {
             if (!(rawId instanceof Number)) return;
             long id = ((Number) rawId).longValue();
             if (id == 0 || result.containsKey(id)) return;
-            result.put(id, new ChatChoice(id, resolveTitle(controllerClass, controller, id)));
+            ChatChoice choice = resolveChatChoice(controllerClass, controller, id);
+            result.put(id, choice);
         } catch (Throwable ignored) { }
     }
 
@@ -296,28 +297,84 @@ public final class MorpheSettingsActivity extends Activity {
         return null;
     }
 
-    private String resolveTitle(Class<?> mc, Object controller, long dialogId) {
+    /** Resolve dialog names using Telegram's native account controller. Handles int/long APIs and obfuscated forks. */
+    private ChatChoice resolveChatChoice(Class<?> mc, Object controller, long dialogId) {
+        String title = null;
+        String icon = dialogId > 0 ? "👤" : "👥";
         try {
-            if (dialogId < 0) {
-                long decoded = dialogId <= -1000000000000L ? -dialogId - 1000000000000L : -dialogId;
-                Object chat = mc.getMethod("getChat", int.class).invoke(controller, (int) decoded);
-                if (chat != null) return String.valueOf(chat.getClass().getField("title").get(chat));
-            } else {
-                Object user = mc.getMethod("getUser", long.class).invoke(controller, dialogId);
+            if (dialogId > 0) {
+                Object user = invokeNumericGetter(mc, controller, "getUser", dialogId);
                 if (user != null) {
-                    String first = String.valueOf(user.getClass().getField("first_name").get(user));
-                    String last = String.valueOf(user.getClass().getField("last_name").get(user));
-                    String name = (first + " " + last).trim();
-                    if (!name.isEmpty()) return name;
+                    String first = readStringField(user, "first_name");
+                    String last = readStringField(user, "last_name");
+                    title = (first + " " + last).trim();
+                    if (title.isEmpty()) title = readStringField(user, "username");
+                }
+            } else {
+                long chatId = dialogId <= -1000000000000L
+                        ? -dialogId - 1000000000000L : -dialogId;
+                Object chat = invokeNumericGetter(mc, controller, "getChat", chatId);
+                if (chat != null) {
+                    title = readStringField(chat, "title");
+                    // Telegram channel chats expose broadcast/megagroup flags in flags.
+                    int flags = readIntField(chat, "flags");
+                    boolean channel = chat.getClass().getName().contains("TL_channel")
+                            || hasBooleanField(chat, "broadcast") || hasBooleanField(chat, "megagroup");
+                    if (channel && hasBooleanFieldValue(chat, "broadcast")) icon = "📢";
+                    else if (channel) icon = "📣";
+                    else icon = "👥";
                 }
             }
         } catch (Throwable ignored) { }
-        return "Chat " + dialogId;
+        if (title == null || title.trim().isEmpty() || "null".equals(title)) title = "Chat";
+        return new ChatChoice(dialogId, title.trim(), icon);
+    }
+
+    private Object invokeNumericGetter(Class<?> owner, Object target, String name, long value) {
+        for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
+            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                Class<?>[] p = m.getParameterTypes();
+                if (!m.getName().equals(name) || p.length != 1) continue;
+                try {
+                    Object arg;
+                    if (p[0] == int.class || p[0] == Integer.class) arg = (int) value;
+                    else if (p[0] == long.class || p[0] == Long.class) arg = value;
+                    else continue;
+                    m.setAccessible(true);
+                    return m.invoke(target, arg);
+                } catch (Throwable ignored) { }
+            }
+        }
+        return null;
+    }
+
+    private String readStringField(Object object, String name) {
+        java.lang.reflect.Field f = findField(object.getClass(), name);
+        if (f == null) return "";
+        try { f.setAccessible(true); Object v = f.get(object); return v == null ? "" : String.valueOf(v); }
+        catch (Throwable ignored) { return ""; }
+    }
+
+    private int readIntField(Object object, String name) {
+        java.lang.reflect.Field f = findField(object.getClass(), name);
+        if (f == null) return 0;
+        try { f.setAccessible(true); Object v = f.get(object); return v instanceof Number ? ((Number) v).intValue() : 0; }
+        catch (Throwable ignored) { return 0; }
+    }
+
+    private boolean hasBooleanField(Object object, String name) {
+        return findField(object.getClass(), name) != null;
+    }
+
+    private boolean hasBooleanFieldValue(Object object, String name) {
+        java.lang.reflect.Field f = findField(object.getClass(), name);
+        if (f == null) return false;
+        try { f.setAccessible(true); return f.getBoolean(object); } catch (Throwable ignored) { return false; }
     }
 
     private static final class ChatChoice {
-        final long id; final String title;
-        ChatChoice(long id, String title) { this.id = id; this.title = title; }
+        final long id; final String title; final String icon;
+        ChatChoice(long id, String title, String icon) { this.id = id; this.title = title; this.icon = icon; }
     }
 
     private void saveRule() {
