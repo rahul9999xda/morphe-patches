@@ -41,6 +41,8 @@ public final class MorpheSettingsActivity extends Activity {
     private Spinner matchSpinner;
     private Spinner deliverySpinner;
     private Switch caseSensitiveSwitch;
+    private Switch showSenderSwitch;
+    private String editingRuleId;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -121,6 +123,12 @@ public final class MorpheSettingsActivity extends Activity {
         deliverySpinner = spinner(new String[]{"Forward (preserve attribution)", "Copy (send as a new message)"});
         form.addView(deliverySpinner, params(-1, dp(48)));
 
+        showSenderSwitch = new Switch(this);
+        showSenderSwitch.setText("Show original sender name (forward mode)");
+        showSenderSwitch.setTextColor(primary);
+        showSenderSwitch.setTextSize(14);
+        form.addView(showSenderSwitch, params(-1, -2));
+
         caseSensitiveSwitch = new Switch(this);
         caseSensitiveSwitch.setText("Case-sensitive keyword matching");
         caseSensitiveSwitch.setTextColor(primary);
@@ -166,26 +174,44 @@ public final class MorpheSettingsActivity extends Activity {
             }
             EditText target = source ? sourceInput : destinationInput;
             Set<Long> selected = parseIds(text(target));
-            String[] labels = new String[choices.size()];
-            boolean[] checked = new boolean[choices.size()];
-            for (int i = 0; i < choices.size(); i++) {
-                ChatChoice c = choices.get(i);
-                labels[i] = c.icon + "  " + c.title + "  ·  " + c.id;
-                checked[i] = selected.contains(c.id);
-            }
-            new AlertDialog.Builder(this)
-                    .setTitle(source ? "Choose source chats" : "Choose destination chats")
-                    .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> {
-                        if (isChecked) selected.add(choices.get(which).id);
-                        else selected.remove(choices.get(which).id);
-                    })
+            final android.widget.ListView list = new android.widget.ListView(this);
+            list.setChoiceMode(android.widget.ListView.CHOICE_MODE_MULTIPLE);
+            final EditText search = new EditText(this);
+            search.setSingleLine(true);
+            search.setHint("Search chats");
+            final ArrayList<ChatChoice> visible = new ArrayList<>(choices);
+            final ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                    android.R.layout.simple_list_item_multiple_choice, new ArrayList<String>());
+            for (ChatChoice c : visible) adapter.add(c.icon + "  " + c.title + "  ·  " + c.id);
+            list.setAdapter(adapter);
+            for (int i=0;i<visible.size();i++) list.setItemChecked(i, selected.contains(visible.get(i).id));
+            list.setOnItemClickListener((parent, view, position, id) -> {
+                long chatId = visible.get(position).id;
+                if (list.isItemChecked(position)) selected.add(chatId); else selected.remove(chatId);
+            });
+            LinearLayout pickerLayout = new LinearLayout(this);
+            pickerLayout.setOrientation(LinearLayout.VERTICAL);
+            pickerLayout.setPadding(dp(16), dp(8), dp(16), dp(8));
+            pickerLayout.addView(search, params(-1, dp(48)));
+            pickerLayout.addView(list, params(-1, dp(420)));
+            search.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s,int st,int count,int after) {}
+                public void onTextChanged(CharSequence s,int st,int before,int count) {
+                    String q=s.toString().trim().toLowerCase(java.util.Locale.ROOT);
+                    visible.clear(); adapter.clear();
+                    for (ChatChoice c:choices) if (q.isEmpty() || c.title.toLowerCase(java.util.Locale.ROOT).contains(q)
+                            || String.valueOf(c.id).contains(q)) { visible.add(c); adapter.add(c.icon + "  " + c.title + "  ·  " + c.id); }
+                    adapter.notifyDataSetChanged();
+                    for (int i=0;i<visible.size();i++) list.setItemChecked(i, selected.contains(visible.get(i).id));
+                }
+                public void afterTextChanged(android.text.Editable e) {}
+            });
+            new AlertDialog.Builder(this).setTitle(source ? "Choose source chats" : "Choose destination chats")
+                    .setView(pickerLayout)
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Apply", (d, which) -> {
                         StringBuilder ids = new StringBuilder();
-                        for (Long id : selected) {
-                            if (ids.length() > 0) ids.append(", ");
-                            ids.append(id);
-                        }
+                        for (Long id : selected) { if (ids.length() > 0) ids.append(", "); ids.append(id); }
                         target.setText(ids.toString());
                     }).show();
         } catch (Throwable e) {
@@ -388,15 +414,19 @@ public final class MorpheSettingsActivity extends Activity {
                 return;
             }
             List<ForwardingRule> rules = new ArrayList<>(store.loadAllRules());
-            ForwardingRule rule = new ForwardingRule(UUID.randomUUID().toString(), name, true,
+            ForwardingRule rule = new ForwardingRule(editingRuleId == null ? UUID.randomUUID().toString() : editingRuleId, name, true,
                     sources, destinations, parseWords(text(includeInput)), parseWords(text(excludeInput)),
                     matchSpinner.getSelectedItemPosition() == 1 ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                     caseSensitiveSwitch.isChecked(), deliverySpinner.getSelectedItemPosition() == 1
-                            ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD);
-            rules.add(rule);
+                            ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
+                    showSenderSwitch.isChecked());
+            if (editingRuleId == null) rules.add(rule);
+            else { for (int i=0;i<rules.size();i++) if (rules.get(i).getId().equals(editingRuleId)) { rules.set(i, rule); break; } }
+            editingRuleId = null;
             store.saveRules(rules);
             nameInput.setText(""); sourceInput.setText(""); destinationInput.setText("");
             includeInput.setText(""); excludeInput.setText("");
+            showSenderSwitch.setChecked(false);
             refreshRules();
             Toast.makeText(this, "Forwarding rule saved", Toast.LENGTH_SHORT).show();
         } catch (Throwable error) {
@@ -421,11 +451,19 @@ public final class MorpheSettingsActivity extends Activity {
             TextView name = label(rule.getName(), isDark() ? 0xfff2f2f2 : 0xff202124);
             name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.addView(name, params(-1, -2));
-            TextView details = label("Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds(), isDark() ? 0xffbdbdbd : 0xff666a73);
+            TextView details = label("Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
+                    + "\nAutomation: " + store.getCount(rule.getId(), "automation")
+                    + " · Forwarded: " + store.getCount(rule.getId(), "forwarded")
+                    + " · Copied: " + store.getCount(rule.getId(), "copied"), isDark() ? 0xffbdbdbd : 0xff666a73);
             details.setTextSize(12);
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
             detailsParams.topMargin = dp(5);
             item.addView(details, detailsParams);
+            Button edit = button("Edit rule");
+            LinearLayout.LayoutParams editParams = params(-1, dp(40));
+            editParams.topMargin = dp(8);
+            item.addView(edit, editParams);
+            edit.setOnClickListener(v -> loadRuleForEdit(rule));
             Button remove = button("Remove rule");
             LinearLayout.LayoutParams removeParams = params(-1, dp(40));
             removeParams.topMargin = dp(8);
@@ -441,6 +479,25 @@ public final class MorpheSettingsActivity extends Activity {
             itemParams.bottomMargin = dp(8);
             rulesContainer.addView(item, itemParams);
         }
+    }
+
+    private void loadRuleForEdit(ForwardingRule rule) {
+        editingRuleId = rule.getId();
+        nameInput.setText(rule.getName());
+        sourceInput.setText(joinIds(rule.getSourceChatIds()));
+        destinationInput.setText(joinIds(rule.getDestinationChatIds()));
+        includeInput.setText(android.text.TextUtils.join(", ", rule.getIncludeKeywords()));
+        excludeInput.setText(android.text.TextUtils.join(", ", rule.getExcludeKeywords()));
+        matchSpinner.setSelection(rule.getMatchMode() == ForwardingRule.MatchMode.ALL ? 1 : 0);
+        deliverySpinner.setSelection(rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? 1 : 0);
+        caseSensitiveSwitch.setChecked(rule.isCaseSensitive());
+        showSenderSwitch.setChecked(rule.isShowSenderName());
+        Toast.makeText(this, "Rule loaded for editing; save to apply changes", Toast.LENGTH_SHORT).show();
+    }
+    private String joinIds(Set<Long> ids) {
+        StringBuilder out = new StringBuilder();
+        for (Long id : ids) { if (out.length() > 0) out.append(", "); out.append(id); }
+        return out.toString();
     }
 
     private void addSectionTitle(String text, int color) {

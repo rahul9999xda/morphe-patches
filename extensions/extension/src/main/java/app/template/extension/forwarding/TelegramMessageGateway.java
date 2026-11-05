@@ -8,12 +8,12 @@ public interface TelegramMessageGateway {
     }
 
     void forward(int accountId, ForwardingMessage source,
-                 long destinationChatId, ResultCallback callback);
+                 long destinationChatId, boolean showSenderName, ResultCallback callback);
 
     /**
      * Sends a new message/media copy without forwarded-message attribution.
      * The adapter must preserve supported entities, captions and media metadata.
      */
     void copy(int accountId, ForwardingMessage source, long destinationChatId,
-              ResultCallback callback);
+              boolean showSenderName, ResultCallback callback);
 }

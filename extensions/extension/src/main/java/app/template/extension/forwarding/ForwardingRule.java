@@ -21,6 +21,7 @@ public final class ForwardingRule {
     private final MatchMode matchMode;
     private final boolean caseSensitive;
     private final DeliveryMode deliveryMode;
+    private final boolean showSenderName;
 
     public ForwardingRule(
             String id,
@@ -33,6 +34,13 @@ public final class ForwardingRule {
             MatchMode matchMode,
             boolean caseSensitive,
             DeliveryMode deliveryMode) {
+        this(id, name, enabled, sourceChatIds, destinationChatIds, includeKeywords, excludeKeywords, matchMode, caseSensitive, deliveryMode, false);
+    }
+
+    public ForwardingRule(
+            String id, String name, boolean enabled, Set<Long> sourceChatIds, Set<Long> destinationChatIds,
+            List<String> includeKeywords, List<String> excludeKeywords, MatchMode matchMode,
+            boolean caseSensitive, DeliveryMode deliveryMode, boolean showSenderName) {
         if (id == null || id.trim().isEmpty()) throw new IllegalArgumentException("Rule id is required");
         if (name == null || name.trim().isEmpty()) throw new IllegalArgumentException("Rule name is required");
         this.id = id;
@@ -45,6 +53,7 @@ public final class ForwardingRule {
         this.matchMode = matchMode == null ? MatchMode.ANY : matchMode;
         this.caseSensitive = caseSensitive;
         this.deliveryMode = deliveryMode == null ? DeliveryMode.FORWARD : deliveryMode;
+        this.showSenderName = showSenderName;
         if (this.sourceChatIds.isEmpty()) throw new IllegalArgumentException("At least one source chat is required");
         if (this.destinationChatIds.isEmpty()) throw new IllegalArgumentException("At least one destination chat is required");
     }
@@ -73,4 +82,5 @@ public final class ForwardingRule {
     public MatchMode getMatchMode() { return matchMode; }
     public boolean isCaseSensitive() { return caseSensitive; }
     public DeliveryMode getDeliveryMode() { return deliveryMode; }
+    public boolean isShowSenderName() { return showSenderName; }
 }
