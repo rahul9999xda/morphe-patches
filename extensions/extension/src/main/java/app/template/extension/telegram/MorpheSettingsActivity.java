@@ -6,6 +6,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -25,6 +27,8 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 /** Dedicated in-app Morphe settings screen, opened from Telegram's Settings list. */
@@ -43,6 +47,27 @@ public final class MorpheSettingsActivity extends Activity {
     private Switch caseSensitiveSwitch;
     private Switch showSenderSwitch;
     private String editingRuleId;
+    private final Map<String, TextView> ruleStatsViews = new HashMap<>();
+    private final Handler statsHandler = new Handler(Looper.getMainLooper());
+    private final Runnable statsRefresh = new Runnable() {
+        @Override public void run() {
+            if (!isFinishing() && rulesContainer != null) {
+                refreshRuleStats();
+                statsHandler.postDelayed(this, 1500L);
+            }
+        }
+    };
+
+    @Override protected void onResume() {
+        super.onResume();
+        statsHandler.removeCallbacks(statsRefresh);
+        statsHandler.postDelayed(statsRefresh, 1500L);
+    }
+
+    @Override protected void onPause() {
+        statsHandler.removeCallbacks(statsRefresh);
+        super.onPause();
+    }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -437,6 +462,7 @@ public final class MorpheSettingsActivity extends Activity {
     private void refreshRules() {
         if (rulesContainer == null) return;
         rulesContainer.removeAllViews();
+        ruleStatsViews.clear();
         List<ForwardingRule> rules = store.loadAllRules();
         if (rules.isEmpty()) {
             TextView empty = label("No forwarding rules yet.", 0xff777777);
@@ -451,11 +477,9 @@ public final class MorpheSettingsActivity extends Activity {
             TextView name = label(rule.getName(), isDark() ? 0xfff2f2f2 : 0xff202124);
             name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.addView(name, params(-1, -2));
-            TextView details = label("Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
-                    + "\nAutomation: " + store.getCount(rule.getId(), "automation")
-                    + " · Forwarded: " + store.getCount(rule.getId(), "forwarded")
-                    + " · Copied: " + store.getCount(rule.getId(), "copied"), isDark() ? 0xffbdbdbd : 0xff666a73);
+            TextView details = label(ruleDetailsText(rule), isDark() ? 0xffbdbdbd : 0xff666a73);
             details.setTextSize(12);
+            ruleStatsViews.put(rule.getId(), details);
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
             detailsParams.topMargin = dp(5);
             item.addView(details, detailsParams);
@@ -478,6 +502,24 @@ public final class MorpheSettingsActivity extends Activity {
             LinearLayout.LayoutParams itemParams = params(-1, -2);
             itemParams.bottomMargin = dp(8);
             rulesContainer.addView(item, itemParams);
+        }
+    }
+
+
+    private String ruleDetailsText(ForwardingRule rule) {
+        String deliveryCount = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY
+                ? " · Copied: " + store.getCount(rule.getId(), "copied")
+                : " · Forwarded: " + store.getCount(rule.getId(), "forwarded");
+        return "Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
+                + "\nAutomation: " + store.getCount(rule.getId(), "automation") + deliveryCount;
+    }
+
+    /** Refresh count labels only; do not rebuild cards/buttons while the user is interacting. */
+    private void refreshRuleStats() {
+        if (store == null || ruleStatsViews.isEmpty()) return;
+        for (ForwardingRule rule : store.loadAllRules()) {
+            TextView view = ruleStatsViews.get(rule.getId());
+            if (view != null) view.setText(ruleDetailsText(rule));
         }
     }
 

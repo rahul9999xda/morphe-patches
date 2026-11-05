@@ -171,11 +171,12 @@ public final class MorpheForwardingRuntime {
                         Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         Method method = findForwardMethod(helperClass, messageObject.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(messageObject));
-                        Object result = method.invoke(helper, messages, destinationChatId,
+                        method.invoke(helper, messages, destinationChatId,
                                 !showSenderName, false, false, 0, 0, null, -1, 0L, 0L, null);
-                        if (!(result instanceof Number) || ((Number) result).intValue() == 0) {
-                            throw new IllegalStateException("Telegram rejected the forward request");
-                        }
+                        // The helper's integer is a local message identifier, not a success
+                        // boolean (and may be zero/negative in fork-specific implementations).
+                        // Count acceptance when invocation returns normally; only an exception
+                        // indicates that Telegram rejected the request before enqueueing.
                         if (callback != null) callback.onSuccess();
                     } catch (Throwable error) {
                         if (callback != null) callback.onFailure(unwrap(error));
