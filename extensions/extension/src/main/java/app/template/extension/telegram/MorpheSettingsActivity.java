@@ -488,6 +488,19 @@ public final class MorpheSettingsActivity extends Activity {
             editParams.topMargin = dp(8);
             item.addView(edit, editParams);
             edit.setOnClickListener(v -> loadRuleForEdit(rule));
+            Button reset = button("Reset automation counter");
+            LinearLayout.LayoutParams resetParams = params(-1, dp(40));
+            resetParams.topMargin = dp(8);
+            item.addView(reset, resetParams);
+            reset.setOnClickListener(v -> new AlertDialog.Builder(this)
+                    .setTitle("Reset automation counter?")
+                    .setMessage("This resets Automation and the selected delivery counter for this rule to zero. It does not change the rule.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Reset", (dialog, which) -> {
+                        store.resetStats(rule.getId());
+                        refreshRuleStats();
+                        Toast.makeText(this, "Rule counters reset", Toast.LENGTH_SHORT).show();
+                    }).show());
             Button remove = button("Remove rule");
             LinearLayout.LayoutParams removeParams = params(-1, dp(40));
             removeParams.topMargin = dp(8);

@@ -201,9 +201,17 @@ public final class MorpheForwardingRuntime {
                         Object params = paramsClass.getMethod("of", String.class, long.class)
                                 .invoke(null, source.getText(), destinationChatId);
                         Object owner = messageObject.getClass().getField("messageOwner").get(messageObject);
-                        Object entities = owner.getClass().getField("entities").get(owner);
-                        if (entities instanceof ArrayList) {
-                            paramsClass.getField("entities").set(params, new ArrayList<>((ArrayList<?>) entities));
+                        Object entities = null;
+                        // Use Telegram's own entity resolver first. It can include formatting
+                        // represented by MessageObject.messageText spans, not just raw wire entities.
+                        try {
+                            entities = messageObject.getClass().getMethod("getEntities").invoke(messageObject);
+                        } catch (Throwable ignored) { }
+                        if (!(entities instanceof List)) {
+                            entities = owner.getClass().getField("entities").get(owner);
+                        }
+                        if (entities instanceof List) {
+                            paramsClass.getField("entities").set(params, new ArrayList<>((List<?>) entities));
                         }
                         Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         helperClass.getMethod("sendMessage", paramsClass).invoke(helper, params);
@@ -224,7 +232,8 @@ public final class MorpheForwardingRuntime {
                 if (p[0] == ArrayList.class && p[1] == long.class && p[2] == boolean.class
                         && p[3] == boolean.class && p[4] == boolean.class && p[5] == int.class
                         && p[6] == int.class && p[7].isAssignableFrom(messageObjectClass)
-                        && p[8] == int.class && p[9] == long.class && p[10] == long.class) {
+                        && p[8] == int.class && p[9] == long.class && p[10] == long.class
+                        && p[11].getName().endsWith("MessageSuggestionParams")) {
                     method.setAccessible(true);
                     return method;
                 }
