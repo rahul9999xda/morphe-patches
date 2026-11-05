@@ -156,7 +156,7 @@ public final class MorpheForwardingRuntime {
 
     private static final class NativeGateway implements TelegramMessageGateway {
         @Override public void forward(final int accountId, final ForwardingMessage source,
-                                      final long destinationChatId, final ResultCallback callback) {
+                                      final long destinationChatId, final boolean showSenderName, final ResultCallback callback) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
@@ -178,7 +178,7 @@ public final class MorpheForwardingRuntime {
         }
 
         @Override public void copy(final int accountId, final ForwardingMessage source,
-                                   final long destinationChatId, final ResultCallback callback) {
+                                   final long destinationChatId, final boolean showSenderName, final ResultCallback callback) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {

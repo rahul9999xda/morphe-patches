@@ -81,9 +81,9 @@ public final class ForwardingCoordinator {
         };
         try {
             if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
-                gateway.copy(message.getAccountId(), message, destination, callback);
+                gateway.copy(message.getAccountId(), message, destination, false, callback);
             } else {
-                gateway.forward(message.getAccountId(), message, destination, callback);
+                gateway.forward(message.getAccountId(), message, destination, false, callback);
             }
         } catch (Throwable error) {
             callback.onFailure(error);
