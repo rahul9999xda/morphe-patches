@@ -1,7 +1,6 @@
 package app.template.extension.telegram;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -41,8 +40,6 @@ public final class MorpheSettingsActivity extends Activity {
     private Spinner matchSpinner;
     private Spinner deliverySpinner;
     private Switch caseSensitiveSwitch;
-    private Switch showSenderSwitch;
-    private String editingRuleId;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -100,14 +97,8 @@ public final class MorpheSettingsActivity extends Activity {
         addSectionTitle("Create forwarding rule", primary);
         LinearLayout form = card(surface);
         nameInput = addInput(form, "Rule name", "e.g. News forwarding");
-        sourceInput = addInput(form, "Source chats", "Choose chats or edit dialog IDs");
-        Button pickSources = button("Choose source chats");
-        form.addView(pickSources, params(-1, dp(44)));
-        pickSources.setOnClickListener(v -> showChatPicker(true));
-        destinationInput = addInput(form, "Destination chats", "Choose chats or edit dialog IDs");
-        Button pickDestinations = button("Choose destination chats");
-        form.addView(pickDestinations, params(-1, dp(44)));
-        pickDestinations.setOnClickListener(v -> showChatPicker(false));
+        sourceInput = addInput(form, "Source chat IDs", "Comma-separated IDs, e.g. -1001234567890, 123456789");
+        destinationInput = addInput(form, "Destination chat IDs", "Comma-separated IDs");
         includeInput = addInput(form, "Include keywords (optional)", "Comma-separated words or phrases");
         excludeInput = addInput(form, "Exclude keywords (optional)", "Comma-separated words or phrases");
 
@@ -122,12 +113,6 @@ public final class MorpheSettingsActivity extends Activity {
         form.addView(deliveryLabel, deliveryLabelParams);
         deliverySpinner = spinner(new String[]{"Forward (preserve attribution)", "Copy (send as a new message)"});
         form.addView(deliverySpinner, params(-1, dp(48)));
-
-        showSenderSwitch = new Switch(this);
-        showSenderSwitch.setText("Show original sender name (forward mode)");
-        showSenderSwitch.setTextColor(primary);
-        showSenderSwitch.setTextSize(14);
-        form.addView(showSenderSwitch, params(-1, -2));
 
         caseSensitiveSwitch = new Switch(this);
         caseSensitiveSwitch.setText("Case-sensitive keyword matching");
@@ -155,252 +140,12 @@ public final class MorpheSettingsActivity extends Activity {
         content.addView(rulesContainer, rulesParams);
 
         TextView note = new TextView(this);
-        note.setText("Choose source and destination chats from Telegram dialogs, or enter dialog IDs manually. Secret chats and protected/no-forward messages are excluded.");
+        note.setText("Chat IDs are Telegram dialog IDs. User chats are usually positive; groups and channels are usually negative. Secret chats and protected/no-forward messages are excluded.");
         note.setTextSize(12);
         note.setTextColor(secondary);
         LinearLayout.LayoutParams noteParams = params(-1, -2);
         noteParams.topMargin = dp(18);
         content.addView(note, noteParams);
-    }
-
-
-    /** Reads the currently loaded Telegram dialogs from the active native account. */
-    private void showChatPicker(boolean source) {
-        try {
-            List<ChatChoice> choices = readTelegramDialogs();
-            if (choices.isEmpty()) {
-                Toast.makeText(this, "No Telegram dialogs are loaded. Open Chats and retry.", Toast.LENGTH_LONG).show();
-                return;
-            }
-            EditText target = source ? sourceInput : destinationInput;
-            Set<Long> selected = parseIds(text(target));
-            final android.widget.ListView list = new android.widget.ListView(this);
-            list.setChoiceMode(android.widget.ListView.CHOICE_MODE_MULTIPLE);
-            final EditText search = new EditText(this);
-            search.setSingleLine(true);
-            search.setHint("Search chats");
-            final ArrayList<ChatChoice> visible = new ArrayList<>(choices);
-            final ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                    android.R.layout.simple_list_item_multiple_choice, new ArrayList<String>());
-            for (ChatChoice c : visible) adapter.add(c.icon + "  " + c.title + "  ·  " + c.id);
-            list.setAdapter(adapter);
-            for (int i=0;i<visible.size();i++) list.setItemChecked(i, selected.contains(visible.get(i).id));
-            list.setOnItemClickListener((parent, view, position, id) -> {
-                long chatId = visible.get(position).id;
-                if (list.isItemChecked(position)) selected.add(chatId); else selected.remove(chatId);
-            });
-            LinearLayout pickerLayout = new LinearLayout(this);
-            pickerLayout.setOrientation(LinearLayout.VERTICAL);
-            pickerLayout.setPadding(dp(16), dp(8), dp(16), dp(8));
-            pickerLayout.addView(search, params(-1, dp(48)));
-            pickerLayout.addView(list, params(-1, dp(420)));
-            search.addTextChangedListener(new android.text.TextWatcher() {
-                public void beforeTextChanged(CharSequence s,int st,int count,int after) {}
-                public void onTextChanged(CharSequence s,int st,int before,int count) {
-                    String q=s.toString().trim().toLowerCase(java.util.Locale.ROOT);
-                    visible.clear(); adapter.clear();
-                    for (ChatChoice c:choices) if (q.isEmpty() || c.title.toLowerCase(java.util.Locale.ROOT).contains(q)
-                            || String.valueOf(c.id).contains(q)) { visible.add(c); adapter.add(c.icon + "  " + c.title + "  ·  " + c.id); }
-                    adapter.notifyDataSetChanged();
-                    for (int i=0;i<visible.size();i++) list.setItemChecked(i, selected.contains(visible.get(i).id));
-                }
-                public void afterTextChanged(android.text.Editable e) {}
-            });
-            new AlertDialog.Builder(this).setTitle(source ? "Choose source chats" : "Choose destination chats")
-                    .setView(pickerLayout)
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Apply", (d, which) -> {
-                        StringBuilder ids = new StringBuilder();
-                        for (Long id : selected) { if (ids.length() > 0) ids.append(", "); ids.append(id); }
-                        target.setText(ids.toString());
-                    }).show();
-        } catch (Throwable e) {
-            Toast.makeText(this, "Could not load Telegram chats. Open the Chats screen once, then retry. Details: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private List<ChatChoice> readTelegramDialogs() throws Exception {
-        ClassLoader cl = getClassLoader();
-        Class<?> userConfig = Class.forName("org.telegram.messenger.UserConfig", false, cl);
-        int account = 0;
-        try { account = userConfig.getField("selectedAccount").getInt(null); } catch (Throwable ignored) { }
-
-        Class<?> controllerClass = Class.forName("org.telegram.messenger.MessagesController", false, cl);
-        Object controller = controllerClass.getMethod("getInstance", int.class).invoke(null, account);
-        if (controller == null) throw new IllegalStateException("Telegram MessagesController is unavailable");
-
-        // Do not assume a public field named "dialogs": Telegram forks move/rename this collection.
-        java.util.LinkedHashMap<Long, ChatChoice> found = new java.util.LinkedHashMap<>();
-        Class<?> type = controller.getClass();
-        while (type != null && type != Object.class) {
-            for (java.lang.reflect.Field field : type.getDeclaredFields()) {
-                if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
-                try {
-                    field.setAccessible(true);
-                    Object value = field.get(controller);
-                    collectDialogCandidates(value, controllerClass, controller, found);
-                } catch (Throwable ignored) { }
-            }
-            type = type.getSuperclass();
-        }
-        ArrayList<ChatChoice> result = new ArrayList<>(found.values());
-        java.util.Collections.sort(result, (a, b) -> a.title.compareToIgnoreCase(b.title));
-        return result;
-    }
-
-    /** Handles Telegram's ArrayList/Map and Android SparseArray/LongSparseArray containers. */
-    private void collectDialogCandidates(Object value, Class<?> controllerClass, Object controller,
-                                         java.util.Map<Long, ChatChoice> result) {
-        if (value == null) return;
-        try {
-            if (value instanceof Iterable) {
-                for (Object item : (Iterable<?>) value) addDialogChoice(item, controllerClass, controller, result);
-                return;
-            }
-            if (value instanceof java.util.Map) {
-                for (Object item : ((java.util.Map<?, ?>) value).values()) addDialogChoice(item, controllerClass, controller, result);
-                return;
-            }
-            if (value.getClass().isArray()) {
-                int n = java.lang.reflect.Array.getLength(value);
-                for (int i = 0; i < n; i++) addDialogChoice(java.lang.reflect.Array.get(value, i), controllerClass, controller, result);
-                return;
-            }
-            // android.util.LongSparseArray, SparseArray and Telegram's sparse containers.
-            java.lang.reflect.Method size = findNoArgMethod(value.getClass(), "size");
-            java.lang.reflect.Method valueAt = findIndexedMethod(value.getClass(), "valueAt");
-            if (size != null && valueAt != null) {
-                size.setAccessible(true);
-                valueAt.setAccessible(true);
-                int count = ((Number) size.invoke(value)).intValue();
-                for (int i = 0; i < count; i++) addDialogChoice(valueAt.invoke(value, i), controllerClass, controller, result);
-            }
-        } catch (Throwable ignored) { }
-    }
-
-    private java.lang.reflect.Method findNoArgMethod(Class<?> type, String name) {
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            try { return c.getDeclaredMethod(name); } catch (Throwable ignored) { }
-        }
-        return null;
-    }
-
-    private java.lang.reflect.Method findIndexedMethod(Class<?> type, String name) {
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            for (java.lang.reflect.Method method : c.getDeclaredMethods()) {
-                if (method.getName().equals(name) && method.getParameterTypes().length == 1
-                        && method.getParameterTypes()[0] == int.class) return method;
-            }
-        }
-        return null;
-    }
-
-    private void addDialogChoice(Object dialog, Class<?> controllerClass, Object controller,
-                                 java.util.Map<Long, ChatChoice> result) {
-        if (dialog == null) return;
-        try {
-            // Telegram's concrete TL object is commonly TLRPC$TL_dialog, not TLRPC$Dialog.
-            // Test assignability against the base type instead of a case-sensitive class-name substring.
-            ClassLoader cl = getClassLoader();
-            Class<?> dialogBase = Class.forName("org.telegram.tgnet.TLRPC$Dialog", false, cl);
-            if (!dialogBase.isAssignableFrom(dialog.getClass())) return;
-            java.lang.reflect.Field idField = findField(dialog.getClass(), "id");
-            if (idField == null) return;
-            idField.setAccessible(true);
-            Object rawId = idField.get(dialog);
-            if (!(rawId instanceof Number)) return;
-            long id = ((Number) rawId).longValue();
-            if (id == 0 || result.containsKey(id)) return;
-            ChatChoice choice = resolveChatChoice(controllerClass, controller, id);
-            result.put(id, choice);
-        } catch (Throwable ignored) { }
-    }
-
-    private java.lang.reflect.Field findField(Class<?> type, String name) {
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            try { return c.getDeclaredField(name); } catch (Throwable ignored) { }
-        }
-        return null;
-    }
-
-    /** Resolve dialog names using Telegram's native account controller. Handles int/long APIs and obfuscated forks. */
-    private ChatChoice resolveChatChoice(Class<?> mc, Object controller, long dialogId) {
-        String title = null;
-        String icon = dialogId > 0 ? "👤" : "👥";
-        try {
-            if (dialogId > 0) {
-                Object user = invokeNumericGetter(mc, controller, "getUser", dialogId);
-                if (user != null) {
-                    String first = readStringField(user, "first_name");
-                    String last = readStringField(user, "last_name");
-                    title = (first + " " + last).trim();
-                    if (title.isEmpty()) title = readStringField(user, "username");
-                }
-            } else {
-                long chatId = dialogId <= -1000000000000L
-                        ? -dialogId - 1000000000000L : -dialogId;
-                Object chat = invokeNumericGetter(mc, controller, "getChat", chatId);
-                if (chat != null) {
-                    title = readStringField(chat, "title");
-                    // Telegram channel chats expose broadcast/megagroup flags in flags.
-                    int flags = readIntField(chat, "flags");
-                    boolean channel = chat.getClass().getName().contains("TL_channel")
-                            || hasBooleanField(chat, "broadcast") || hasBooleanField(chat, "megagroup");
-                    if (channel && hasBooleanFieldValue(chat, "broadcast")) icon = "📢";
-                    else if (channel) icon = "📣";
-                    else icon = "👥";
-                }
-            }
-        } catch (Throwable ignored) { }
-        if (title == null || title.trim().isEmpty() || "null".equals(title)) title = "Chat";
-        return new ChatChoice(dialogId, title.trim(), icon);
-    }
-
-    private Object invokeNumericGetter(Class<?> owner, Object target, String name, long value) {
-        for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
-            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                Class<?>[] p = m.getParameterTypes();
-                if (!m.getName().equals(name) || p.length != 1) continue;
-                try {
-                    Object arg;
-                    if (p[0] == int.class || p[0] == Integer.class) arg = (int) value;
-                    else if (p[0] == long.class || p[0] == Long.class) arg = value;
-                    else continue;
-                    m.setAccessible(true);
-                    return m.invoke(target, arg);
-                } catch (Throwable ignored) { }
-            }
-        }
-        return null;
-    }
-
-    private String readStringField(Object object, String name) {
-        java.lang.reflect.Field f = findField(object.getClass(), name);
-        if (f == null) return "";
-        try { f.setAccessible(true); Object v = f.get(object); return v == null ? "" : String.valueOf(v); }
-        catch (Throwable ignored) { return ""; }
-    }
-
-    private int readIntField(Object object, String name) {
-        java.lang.reflect.Field f = findField(object.getClass(), name);
-        if (f == null) return 0;
-        try { f.setAccessible(true); Object v = f.get(object); return v instanceof Number ? ((Number) v).intValue() : 0; }
-        catch (Throwable ignored) { return 0; }
-    }
-
-    private boolean hasBooleanField(Object object, String name) {
-        return findField(object.getClass(), name) != null;
-    }
-
-    private boolean hasBooleanFieldValue(Object object, String name) {
-        java.lang.reflect.Field f = findField(object.getClass(), name);
-        if (f == null) return false;
-        try { f.setAccessible(true); return f.getBoolean(object); } catch (Throwable ignored) { return false; }
-    }
-
-    private static final class ChatChoice {
-        final long id; final String title; final String icon;
-        ChatChoice(long id, String title, String icon) { this.id = id; this.title = title; this.icon = icon; }
     }
 
     private void saveRule() {
@@ -414,19 +159,15 @@ public final class MorpheSettingsActivity extends Activity {
                 return;
             }
             List<ForwardingRule> rules = new ArrayList<>(store.loadAllRules());
-            ForwardingRule rule = new ForwardingRule(editingRuleId == null ? UUID.randomUUID().toString() : editingRuleId, name, true,
+            ForwardingRule rule = new ForwardingRule(UUID.randomUUID().toString(), name, true,
                     sources, destinations, parseWords(text(includeInput)), parseWords(text(excludeInput)),
                     matchSpinner.getSelectedItemPosition() == 1 ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                     caseSensitiveSwitch.isChecked(), deliverySpinner.getSelectedItemPosition() == 1
-                            ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                    showSenderSwitch.isChecked());
-            if (editingRuleId == null) rules.add(rule);
-            else { for (int i=0;i<rules.size();i++) if (rules.get(i).getId().equals(editingRuleId)) { rules.set(i, rule); break; } }
-            editingRuleId = null;
+                            ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD);
+            rules.add(rule);
             store.saveRules(rules);
             nameInput.setText(""); sourceInput.setText(""); destinationInput.setText("");
             includeInput.setText(""); excludeInput.setText("");
-            showSenderSwitch.setChecked(false);
             refreshRules();
             Toast.makeText(this, "Forwarding rule saved", Toast.LENGTH_SHORT).show();
         } catch (Throwable error) {
@@ -451,19 +192,17 @@ public final class MorpheSettingsActivity extends Activity {
             TextView name = label(rule.getName(), isDark() ? 0xfff2f2f2 : 0xff202124);
             name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.addView(name, params(-1, -2));
-            TextView details = label("Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
-                    + "\nAutomation: " + store.getCount(rule.getId(), "automation")
-                    + " · Forwarded: " + store.getCount(rule.getId(), "forwarded")
-                    + " · Copied: " + store.getCount(rule.getId(), "copied"), isDark() ? 0xffbdbdbd : 0xff666a73);
+            String metric = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY
+                    ? "Copied: " + store.getCount(rule.getId(), "copied")
+                    : "Forwarded: " + store.getCount(rule.getId(), "forwarded");
+            String detailsText = "Automations: " + store.getCount(rule.getId(), "automations")
+                    + "  •  " + metric + "\nSources: " + rule.getSourceChatIds()
+                    + "\nDestinations: " + rule.getDestinationChatIds();
+            TextView details = label(detailsText, isDark() ? 0xffbdbdbd : 0xff666a73);
             details.setTextSize(12);
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
             detailsParams.topMargin = dp(5);
             item.addView(details, detailsParams);
-            Button edit = button("Edit rule");
-            LinearLayout.LayoutParams editParams = params(-1, dp(40));
-            editParams.topMargin = dp(8);
-            item.addView(edit, editParams);
-            edit.setOnClickListener(v -> loadRuleForEdit(rule));
             Button remove = button("Remove rule");
             LinearLayout.LayoutParams removeParams = params(-1, dp(40));
             removeParams.topMargin = dp(8);
@@ -479,25 +218,6 @@ public final class MorpheSettingsActivity extends Activity {
             itemParams.bottomMargin = dp(8);
             rulesContainer.addView(item, itemParams);
         }
-    }
-
-    private void loadRuleForEdit(ForwardingRule rule) {
-        editingRuleId = rule.getId();
-        nameInput.setText(rule.getName());
-        sourceInput.setText(joinIds(rule.getSourceChatIds()));
-        destinationInput.setText(joinIds(rule.getDestinationChatIds()));
-        includeInput.setText(android.text.TextUtils.join(", ", rule.getIncludeKeywords()));
-        excludeInput.setText(android.text.TextUtils.join(", ", rule.getExcludeKeywords()));
-        matchSpinner.setSelection(rule.getMatchMode() == ForwardingRule.MatchMode.ALL ? 1 : 0);
-        deliverySpinner.setSelection(rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? 1 : 0);
-        caseSensitiveSwitch.setChecked(rule.isCaseSensitive());
-        showSenderSwitch.setChecked(rule.isShowSenderName());
-        Toast.makeText(this, "Rule loaded for editing; save to apply changes", Toast.LENGTH_SHORT).show();
-    }
-    private String joinIds(Set<Long> ids) {
-        StringBuilder out = new StringBuilder();
-        for (Long id : ids) { if (out.length() > 0) out.append(", "); out.append(id); }
-        return out.toString();
     }
 
     private void addSectionTitle(String text, int color) {

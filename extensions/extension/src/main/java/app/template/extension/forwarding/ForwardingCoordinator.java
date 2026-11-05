@@ -33,7 +33,7 @@ public final class ForwardingCoordinator {
 
     public void onIncomingMessage(final ForwardingMessage message) {
         if (!running || message == null || message.isOutgoing() || message.isSecretChat()
-                || message.isServiceMessage()) return;
+                || message.isServiceMessage() || message.isProtectedContent()) return;
         executor.execute(new Runnable() {
             @Override public void run() {
                 if (!running) return;
@@ -41,9 +41,6 @@ public final class ForwardingCoordinator {
                 if (rules == null) return;
                 for (ForwardingRule rule : rules) {
                     if (!ForwardingRuleMatcher.matches(rule, message)) continue;
-                    if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                        ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordAutomation(rule.getId());
-                    }
                     for (Long destination : rule.getDestinationChatIds()) {
                         if (destination == null || destination.longValue() == message.getSourceChatId()) continue;
                         dispatch(rule, message, destination.longValue());
@@ -65,12 +62,14 @@ public final class ForwardingCoordinator {
             }
         }
         if (!inFlight.add(key)) return;
+        if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+            ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordAutomation(rule.getId());
+        }
         TelegramMessageGateway.ResultCallback callback = new TelegramMessageGateway.ResultCallback() {
             @Override public void onSuccess() {
                 inFlight.remove(key);
                 if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore stats =
-                            (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
+                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore stats = (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
                     if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) stats.recordCopied(rule.getId());
                     else stats.recordForwarded(rule.getId());
                 }
@@ -82,9 +81,9 @@ public final class ForwardingCoordinator {
         };
         try {
             if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
-                gateway.copy(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                gateway.copy(message.getAccountId(), message, destination, callback);
             } else {
-                gateway.forward(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                gateway.forward(message.getAccountId(), message, destination, callback);
             }
         } catch (Throwable error) {
             callback.onFailure(error);
