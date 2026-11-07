@@ -7,7 +7,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -16,44 +15,60 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** Builds a Telegram-style Morphe card in the Settings screen. */
+/**
+ * Adds a Telegram Help-card-style Morphe section to the Settings screen.
+ *
+ * The public factory name and return type intentionally remain unchanged:
+ * the existing Telegram 13.1.1 settings injection calls this method.
+ */
 public final class MorpheSettingsEntry {
-    private static final int ACCENT = 0xff079bc9;
+    private static final int MORPHE_BLUE = 0xff079fc5;
+
     private MorpheSettingsEntry() { }
 
-    /** Kept for compatibility with the existing Telegram Settings injection hook. */
     public static View createSettingsRow(Context context) {
-        if (context == null) throw new IllegalStateException("Telegram application context is not ready");
+        if (context == null) {
+            throw new IllegalStateException("Telegram application context is not ready");
+        }
         final Context appContext = context;
 
-        LinearLayout outer = new LinearLayout(context);
-        outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 12));
-        outer.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        // Outer wrapper supplies the same breathing room as Telegram's settings cards.
+        LinearLayout section = new LinearLayout(context);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(context, 16), dp(context, 12),
+                dp(context, 16), dp(context, 12));
+        section.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        LinearLayout card = new LinearLayout(context);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(context, 22), dp(context, 18), dp(context, 18), dp(context, 18));
-        card.setBackground(cardBackground(context));
-        card.setElevation(dp(context, 1));
-        outer.addView(card, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView sectionTitle = new TextView(context);
-        sectionTitle.setText("Morphe");
-        sectionTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        sectionTitle.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-        sectionTitle.setTextColor(ACCENT);
+        TextView heading = new TextView(context);
+        heading.setText("Morphe");
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
+                android.graphics.Typeface.NORMAL));
+        heading.setTextColor(MORPHE_BLUE);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        headingParams.bottomMargin = dp(context, 14);
-        card.addView(sectionTitle, headingParams);
+        headingParams.leftMargin = dp(context, 22);
+        headingParams.bottomMargin = dp(context, 10);
+        section.addView(heading, headingParams);
+
+        // Match Telegram Help: plain white/surface card, generous rounded corners,
+        // no outline and no elevation/shadow treatment.
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(context, 22), dp(context, 12),
+                dp(context, 18), dp(context, 12));
+        card.setBackground(createCardBackground(context));
+        section.addView(card, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout item = new LinearLayout(context);
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(0, dp(context, 4), 0, dp(context, 4));
+        item.setMinimumHeight(dp(context, 76));
         item.setBackground(selectableBackground(context));
         item.setClickable(true);
         item.setFocusable(true);
@@ -61,21 +76,24 @@ public final class MorpheSettingsEntry {
         card.addView(item, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        MorpheLogoView logo = new MorpheLogoView(context);
-        item.addView(logo, new LinearLayout.LayoutParams(dp(context, 56), dp(context, 56)));
+        MorpheMarkView icon = new MorpheMarkView(context);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(
+                dp(context, 56), dp(context, 56));
+        item.addView(icon, iconParams);
 
         LinearLayout labels = new LinearLayout(context);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams labelsParams = new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams labelsParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         labelsParams.leftMargin = dp(context, 18);
         item.addView(labels, labelsParams);
 
         TextView title = new TextView(context);
         title.setText("Morphe Settings");
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
+                android.graphics.Typeface.NORMAL));
         title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, 0xff202124));
         labels.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -83,7 +101,8 @@ public final class MorpheSettingsEntry {
         TextView subtitle = new TextView(context);
         subtitle.setText("Automatic forwarding and custom options");
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        subtitle.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff777777));
+        subtitle.setLineSpacing(0f, 1.0f);
+        subtitle.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff666666));
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleParams.topMargin = dp(context, 3);
@@ -92,9 +111,10 @@ public final class MorpheSettingsEntry {
         TextView chevron = new TextView(context);
         chevron.setText("›");
         chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        chevron.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff777777));
+        chevron.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
         chevron.setGravity(Gravity.CENTER);
-        item.addView(chevron, new LinearLayout.LayoutParams(dp(context, 24), dp(context, 48)));
+        item.addView(chevron, new LinearLayout.LayoutParams(
+                dp(context, 24), dp(context, 48)));
 
         item.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
@@ -109,42 +129,57 @@ public final class MorpheSettingsEntry {
                 }
             }
         });
-        return outer;
+        return section;
     }
 
-    /** Filled Telegram-style app tile with a white, custom-drawn puzzle mark. */
-    private static final class MorpheLogoView extends View {
+    /**
+     * Telegram-style filled app tile: a single solid brand colour with a simple,
+     * high-contrast white Morphe "M" mark. Avoids emoji fonts and puzzle silhouettes.
+     */
+    private static final class MorpheMarkView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final RectF tile = new RectF();
         private final Path mark = new Path();
-        MorpheLogoView(Context context) { super(context); setLayerType(View.LAYER_TYPE_SOFTWARE, null); }
+        private final GradientDrawable tile = new GradientDrawable();
+
+        MorpheMarkView(Context context) {
+            super(context);
+            tile.setColor(MORPHE_BLUE);
+            tile.setCornerRadius(dp(context, 15));
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        }
+
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            float d = getResources().getDisplayMetrics().density;
             float side = Math.min(getWidth(), getHeight());
-            float left = (getWidth() - side) / 2f;
-            float top = (getHeight() - side) / 2f;
-            tile.set(left, top, left + side, top + side);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(ACCENT);
-            canvas.drawRoundRect(tile, 14f * d, 14f * d, paint);
-
-            // A clean white puzzle-piece silhouette, matching Telegram's filled help icons.
-            float s = side / 56f;
+            float left = (getWidth() - side) * 0.5f;
+            float top = (getHeight() - side) * 0.5f;
             canvas.save();
-            canvas.translate(left + 10f * s, top + 9f * s);
-            canvas.scale(s, s);
+            canvas.translate(left, top);
+            tile.setBounds(0, 0, (int) side, (int) side);
+            tile.draw(canvas);
+
+            // A compact, geometric M monogram drawn as a filled path.
+            // It remains crisp at Telegram's standard 56dp settings-icon size.
+            float unit = side / 56f;
+            canvas.translate(0f, 0f);
+            canvas.scale(unit, unit);
             mark.reset();
-            mark.moveTo(7, 3); mark.lineTo(17, 3);
-            mark.cubicTo(16, 10, 27, 11, 27, 4);
-            mark.lineTo(37, 4); mark.lineTo(37, 14);
-            mark.cubicTo(30, 13, 29, 24, 37, 24);
-            mark.lineTo(37, 35); mark.lineTo(26, 35);
-            mark.cubicTo(27, 28, 16, 27, 16, 35);
-            mark.lineTo(6, 35); mark.lineTo(6, 24);
-            mark.cubicTo(13, 25, 14, 14, 6, 14);
+            mark.moveTo(13f, 39f);
+            mark.lineTo(13f, 17f);
+            mark.cubicTo(13f, 14.5f, 16f, 13.5f, 18f, 15.5f);
+            mark.lineTo(28f, 27f);
+            mark.lineTo(38f, 15.5f);
+            mark.cubicTo(40f, 13.5f, 43f, 14.5f, 43f, 17f);
+            mark.lineTo(43f, 39f);
+            mark.lineTo(36.5f, 39f);
+            mark.lineTo(36.5f, 25.5f);
+            mark.lineTo(30.5f, 32.5f);
+            mark.cubicTo(29f, 34.2f, 27f, 34.2f, 25.5f, 32.5f);
+            mark.lineTo(19.5f, 25.5f);
+            mark.lineTo(19.5f, 39f);
             mark.close();
             paint.setColor(Color.WHITE);
+            paint.setStyle(Paint.Style.FILL);
             canvas.drawPath(mark, paint);
             canvas.restore();
         }
@@ -153,6 +188,7 @@ public final class MorpheSettingsEntry {
     private static int dp(Context context, float value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
+
     private static int themeColor(Context context, int attribute, int fallback) {
         TypedValue value = new TypedValue();
         if (context.getTheme().resolveAttribute(attribute, value, true)) {
@@ -160,20 +196,29 @@ public final class MorpheSettingsEntry {
                 try { return context.getResources().getColor(value.resourceId); }
                 catch (Throwable ignored) { }
             }
-            if (value.type >= TypedValue.TYPE_FIRST_COLOR_INT && value.type <= TypedValue.TYPE_LAST_COLOR_INT)
+            if (value.type >= TypedValue.TYPE_FIRST_COLOR_INT
+                    && value.type <= TypedValue.TYPE_LAST_COLOR_INT) {
                 return value.data;
+            }
         }
         return fallback;
     }
-    private static android.graphics.drawable.Drawable cardBackground(Context context) {
+
+    private static android.graphics.drawable.Drawable createCardBackground(Context context) {
+        int pageColor = themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3);
+        double luminance = (0.2126 * Color.red(pageColor)
+                + 0.7152 * Color.green(pageColor)
+                + 0.0722 * Color.blue(pageColor)) / 255.0;
+        int surface = luminance < 0.45 ? 0xff242629 : Color.WHITE;
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(themeColor(context, android.R.attr.colorBackground, Color.WHITE));
+        shape.setColor(surface);
         shape.setCornerRadius(dp(context, 24));
-        shape.setStroke(dp(context, 1), themeColor(context, android.R.attr.textColorHint, 0x14000000));
         return shape;
     }
+
     private static android.graphics.drawable.Drawable selectableBackground(Context context) {
-        TypedArray array = context.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackground});
+        TypedArray array = context.obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
         try {
             int resource = array.getResourceId(0, 0);
             return resource != 0 ? context.getDrawable(resource) : new GradientDrawable();
