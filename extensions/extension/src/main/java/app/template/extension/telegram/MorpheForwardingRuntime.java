@@ -17,6 +17,8 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -30,7 +32,10 @@ public final class MorpheForwardingRuntime {
     private static final String MESSAGE_OBJECT = "org.telegram.messenger.MessageObject";
     private static final String APPLICATION_LOADER = "org.telegram.messenger.ApplicationLoader";
     private static final ArrayList<Object> OBSERVERS = new ArrayList<>();
+    private static final Set<Integer> REGISTERED_ACCOUNTS = new HashSet<>();
     private static volatile boolean installed;
+    private static int installRetryCount;
+    private static final int MAX_INSTALL_RETRIES = 20;
     private static ForwardingCoordinator coordinator;
     private static SharedPreferencesForwardingRuleStore store;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -41,11 +46,20 @@ public final class MorpheForwardingRuntime {
         if (installed) return;
         try {
             Context context = applicationContext();
-            if (context == null) return;
-            store = new SharedPreferencesForwardingRuleStore(context);
-            Executor executor = Executors.newSingleThreadExecutor(command -> new Thread(command, "MorpheForwarding"));
-            coordinator = new ForwardingCoordinator(store, new NativeGateway(), executor);
-            coordinator.start();
+            if (context == null) {
+                scheduleInstallRetry();
+                return;
+            }
+            if (store == null) store = new SharedPreferencesForwardingRuleStore(context);
+            if (coordinator == null) {
+                Executor executor = Executors.newSingleThreadExecutor(command -> {
+                    Thread thread = new Thread(command, "MorpheForwarding");
+                    thread.setPriority(Thread.NORM_PRIORITY - 1);
+                    return thread;
+                });
+                coordinator = new ForwardingCoordinator(store, new NativeGateway(), executor);
+                coordinator.start();
+            }
 
             ClassLoader loader = context.getClassLoader();
             Class<?> notificationClass = Class.forName(NOTIFICATION_CENTER, false, loader);
@@ -55,19 +69,38 @@ public final class MorpheForwardingRuntime {
             Method getInstance = notificationClass.getMethod("getInstance", int.class);
             Method addObserver = notificationClass.getMethod("addObserver", delegateClass, int.class);
 
+            // Register independently per account. If one account fails, already-registered
+            // accounts remain recorded and will not receive duplicate observer instances
+            // when a later startup retry fills in the missing accounts.
             for (int account = 0; account < maxAccounts; account++) {
-                Object center = getInstance.invoke(null, account);
-                final int accountId = account;
-                Object observer = Proxy.newProxyInstance(loader, new Class<?>[]{delegateClass},
-                        new NotificationHandler(accountId, eventId));
-                addObserver.invoke(center, observer, eventId);
-                OBSERVERS.add(observer);
+                if (REGISTERED_ACCOUNTS.contains(account)) continue;
+                try {
+                    Object center = getInstance.invoke(null, account);
+                    Object observer = Proxy.newProxyInstance(loader, new Class<?>[]{delegateClass},
+                            new NotificationHandler(account, eventId));
+                    addObserver.invoke(center, observer, eventId);
+                    OBSERVERS.add(observer);
+                    REGISTERED_ACCOUNTS.add(account);
+                } catch (Throwable accountError) {
+                    // Continue registering other active/inactive account slots.
+                }
             }
-            installed = true;
+            installed = REGISTERED_ACCOUNTS.size() >= maxAccounts;
+            if (!installed) scheduleInstallRetry();
+            else installRetryCount = 0;
         } catch (Throwable error) {
             // Keep Telegram startup safe if a future fork changes an internal API.
             installed = false;
+            scheduleInstallRetry();
         }
+    }
+
+    private static void scheduleInstallRetry() {
+        if (installRetryCount >= MAX_INSTALL_RETRIES) return;
+        installRetryCount++;
+        MAIN.postDelayed(new Runnable() {
+            @Override public void run() { MorpheForwardingRuntime.install(); }
+        }, 15000L);
     }
 
     private static Context applicationContext() {
@@ -142,10 +175,8 @@ public final class MorpheForwardingRuntime {
                 Object value = ownerType.getField("message").get(owner);
                 if (value != null) text = String.valueOf(value);
             }
-            // This engine currently automates text only. Forward eligibility is evaluated
-            // per rule; a protected text can still enter COPY mode when permitted by the
-            // separately installed Telegram content-restriction patch.
-            if (text.trim().isEmpty()) return null;
+            // Keep media-only MessageObjects in the event pipeline. FORWARD can pass the
+            // native MessageObject unchanged; COPY remains text-only and is filtered by the matcher.
             return new ForwardingMessage(accountId, dialogId, messageId, text,
                     false, false, false, protectedContent, forwardable, messageObject);
         } catch (Throwable ignored) { return null; }
