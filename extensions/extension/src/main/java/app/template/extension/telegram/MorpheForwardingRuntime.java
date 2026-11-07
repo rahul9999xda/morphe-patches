@@ -3,7 +3,6 @@ package app.template.extension.telegram;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 import app.template.extension.forwarding.ForwardingCoordinator;
 import app.template.extension.forwarding.ForwardingMessage;
@@ -20,9 +19,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Connects the rule engine to Telegram's existing NotificationCenter and SendMessagesHelper.
@@ -33,9 +29,7 @@ public final class MorpheForwardingRuntime {
     private static final String USER_CONFIG = "org.telegram.messenger.UserConfig";
     private static final String MESSAGE_OBJECT = "org.telegram.messenger.MessageObject";
     private static final String APPLICATION_LOADER = "org.telegram.messenger.ApplicationLoader";
-    private static final String TAG = "MorpheForwarding";
     private static final ArrayList<Object> OBSERVERS = new ArrayList<>();
-    private static final Set<Integer> REGISTERED_ACCOUNTS = new HashSet<>();
     private static volatile boolean installed;
     private static ForwardingCoordinator coordinator;
     private static SharedPreferencesForwardingRuleStore store;
@@ -48,16 +42,10 @@ public final class MorpheForwardingRuntime {
         try {
             Context context = applicationContext();
             if (context == null) return;
-            if (coordinator == null) {
-                store = new SharedPreferencesForwardingRuleStore(context);
-                Executor executor = Executors.newSingleThreadExecutor(command -> {
-                    Thread thread = new Thread(command, "MorpheForwarding");
-                    thread.setPriority(Thread.NORM_PRIORITY - 1);
-                    return thread;
-                });
-                coordinator = new ForwardingCoordinator(store, new NativeGateway(), executor);
-                coordinator.start();
-            }
+            store = new SharedPreferencesForwardingRuleStore(context);
+            Executor executor = Executors.newSingleThreadExecutor(command -> new Thread(command, "MorpheForwarding"));
+            coordinator = new ForwardingCoordinator(store, new NativeGateway(), executor);
+            coordinator.start();
 
             ClassLoader loader = context.getClassLoader();
             Class<?> notificationClass = Class.forName(NOTIFICATION_CENTER, false, loader);
@@ -68,27 +56,17 @@ public final class MorpheForwardingRuntime {
             Method addObserver = notificationClass.getMethod("addObserver", delegateClass, int.class);
 
             for (int account = 0; account < maxAccounts; account++) {
-                if (REGISTERED_ACCOUNTS.contains(account)) continue;
-                try {
-                    Object center = getInstance.invoke(null, account);
-                    Object observer = Proxy.newProxyInstance(loader, new Class<?>[]{delegateClass},
-                            new NotificationHandler(account, eventId));
-                    addObserver.invoke(center, observer, eventId);
-                    OBSERVERS.add(observer); // Keep the proxy strongly reachable.
-                    REGISTERED_ACCOUNTS.add(account);
-                } catch (Throwable accountError) {
-                    Log.e(TAG, "Could not register incoming-message observer for account " + account,
-                            unwrap(accountError));
-                }
+                Object center = getInstance.invoke(null, account);
+                final int accountId = account;
+                Object observer = Proxy.newProxyInstance(loader, new Class<?>[]{delegateClass},
+                        new NotificationHandler(accountId, eventId));
+                addObserver.invoke(center, observer, eventId);
+                OBSERVERS.add(observer);
             }
-            installed = REGISTERED_ACCOUNTS.size() == maxAccounts;
-            if (!installed) {
-                // Retry only missing accounts; already-registered observers are not duplicated.
-                MAIN.postDelayed(() -> install(), TimeUnit.SECONDS.toMillis(10));
-            }
+            installed = true;
         } catch (Throwable error) {
+            // Keep Telegram startup safe if a future fork changes an internal API.
             installed = false;
-            Log.e(TAG, "Forwarding runtime installation failed; Telegram startup continues", unwrap(error));
         }
     }
 
@@ -137,7 +115,7 @@ public final class MorpheForwardingRuntime {
                     ForwardingMessage event = toForwardingMessage(accountId, dialogId, message);
                     if (event != null && coordinator != null) coordinator.onIncomingMessage(event);
                 }
-            } catch (Throwable error) { Log.e(TAG, "Incoming-message event processing failed", unwrap(error)); }
+            } catch (Throwable ignored) { }
             return null;
         }
     }
@@ -151,7 +129,7 @@ public final class MorpheForwardingRuntime {
             Class<?> ownerType = owner.getClass();
             if (ownerType.getField("out").getBoolean(owner)) return null;
             if (ownerType.getField("action").get(owner) != null) return null; // service messages
-            if (ownerType.getField("noforwards").getBoolean(owner)) return null;
+            boolean protectedContent = ownerType.getField("noforwards").getBoolean(owner);
             if (isSecretDialog(dialogId)) return null;
             boolean forwardable = Boolean.TRUE.equals(type.getMethod("canForwardMessage").invoke(messageObject));
             int messageId = ((Number) type.getMethod("getId").invoke(messageObject)).intValue();
@@ -164,18 +142,13 @@ public final class MorpheForwardingRuntime {
                 Object value = ownerType.getField("message").get(owner);
                 if (value != null) text = String.valueOf(value);
             }
+            // This engine currently automates text only. Forward eligibility is evaluated
+            // per rule; a protected text can still enter COPY mode when permitted by the
+            // separately installed Telegram content-restriction patch.
+            if (text.trim().isEmpty()) return null;
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, false, forwardable, messageObject);
-        } catch (Throwable error) {
-            Log.e(TAG, "Could not adapt incoming Telegram message", unwrap(error));
-            return null;
-        }
-    }
-
-    private static Throwable unwrap(Throwable error) {
-        return error instanceof java.lang.reflect.InvocationTargetException
-                && ((java.lang.reflect.InvocationTargetException) error).getCause() != null
-                ? ((java.lang.reflect.InvocationTargetException) error).getCause() : error;
+                    false, false, false, protectedContent, forwardable, messageObject);
+        } catch (Throwable ignored) { return null; }
     }
 
     private static boolean isSecretDialog(long dialogId) {
@@ -187,7 +160,7 @@ public final class MorpheForwardingRuntime {
 
     private static final class NativeGateway implements TelegramMessageGateway {
         @Override public void forward(final int accountId, final ForwardingMessage source,
-                                      final long destinationChatId, final ResultCallback callback) {
+                                      final long destinationChatId, final boolean showSenderName, final ResultCallback callback) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
@@ -198,8 +171,12 @@ public final class MorpheForwardingRuntime {
                         Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         Method method = findForwardMethod(helperClass, messageObject.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(messageObject));
-                        Object result = method.invoke(helper, messages, destinationChatId,
-                                false, false, false, 0, 0, null, -1, 0L, 0L, null);
+                        method.invoke(helper, messages, destinationChatId,
+                                !showSenderName, false, false, 0, 0, null, -1, 0L, 0L, null);
+                        // The helper's integer is a local message identifier, not a success
+                        // boolean (and may be zero/negative in fork-specific implementations).
+                        // Count acceptance when invocation returns normally; only an exception
+                        // indicates that Telegram rejected the request before enqueueing.
                         if (callback != null) callback.onSuccess();
                     } catch (Throwable error) {
                         if (callback != null) callback.onFailure(unwrap(error));
@@ -209,41 +186,43 @@ public final class MorpheForwardingRuntime {
         }
 
         @Override public void copy(final int accountId, final ForwardingMessage source,
-                                   final long destinationChatId, final ResultCallback callback) {
+                                   final long destinationChatId, final boolean showSenderName, final ResultCallback callback) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
                         Object messageObject = source.getNativeMessage();
                         if (messageObject == null) throw new IllegalStateException("Original Telegram message is unavailable");
+                        if (source.getText().trim().isEmpty()) throw new IllegalArgumentException("Only text messages can be copied");
                         ClassLoader loader = messageObject.getClass().getClassLoader();
                         Class<?> helperClass = Class.forName("org.telegram.messenger.SendMessagesHelper", false, loader);
                         Class<?> paramsClass = Class.forName("org.telegram.messenger.SendMessagesHelper$SendMessageParams", false, loader);
-                        Method factory = findMessageParamsFactory(paramsClass, messageObject.getClass());
-                        Object params = factory.invoke(null, messageObject);
-                        Field peer = paramsClass.getField("peer");
-                        peer.setAccessible(true);
-                        if (peer.getType() == long.class) peer.setLong(params, destinationChatId);
-                        else peer.set(params, destinationChatId);
+                        // Construct a fresh text message. Do not clone the source MessageObject,
+                        // which could carry protected-media/forward metadata into the destination.
+                        Object params = paramsClass.getMethod("of", String.class, long.class)
+                                .invoke(null, source.getText(), destinationChatId);
+                        Object owner = messageObject.getClass().getField("messageOwner").get(messageObject);
+                        Object entities = null;
+                        // Use Telegram's own entity resolver first. It can include formatting
+                        // represented by MessageObject.messageText spans, not just raw wire entities.
+                        try {
+                            entities = messageObject.getClass().getMethod("getEntities").invoke(messageObject);
+                        } catch (Throwable ignored) { }
+                        if (!(entities instanceof List)) {
+                            entities = owner.getClass().getField("entities").get(owner);
+                        }
+                        if (entities instanceof List) {
+                            paramsClass.getField("entities").set(params, new ArrayList<>((List<?>) entities));
+                        }
                         Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         helperClass.getMethod("sendMessage", paramsClass).invoke(helper, params);
+                        // The params overload returns void: success here means accepted by
+                        // Telegram's local send pipeline, not confirmed server delivery.
                         if (callback != null) callback.onSuccess();
                     } catch (Throwable error) {
                         if (callback != null) callback.onFailure(unwrap(error));
                     }
                 }
             });
-        }
-
-        private static Method findMessageParamsFactory(Class<?> paramsClass, Class<?> messageObjectClass)
-                throws NoSuchMethodException {
-            for (Method method : paramsClass.getMethods()) {
-                if (!"of".equals(method.getName()) || method.getParameterTypes().length != 1) continue;
-                if (method.getParameterTypes()[0].isAssignableFrom(messageObjectClass)) {
-                    method.setAccessible(true);
-                    return method;
-                }
-            }
-            throw new NoSuchMethodException("SendMessageParams.of(MessageObject) not found");
         }
 
         private static Method findForwardMethod(Class<?> helperClass, Class<?> messageObjectClass) throws NoSuchMethodException {
@@ -253,7 +232,8 @@ public final class MorpheForwardingRuntime {
                 if (p[0] == ArrayList.class && p[1] == long.class && p[2] == boolean.class
                         && p[3] == boolean.class && p[4] == boolean.class && p[5] == int.class
                         && p[6] == int.class && p[7].isAssignableFrom(messageObjectClass)
-                        && p[8] == int.class && p[9] == long.class && p[10] == long.class) {
+                        && p[8] == int.class && p[9] == long.class && p[10] == long.class
+                        && p[11].getName().endsWith("MessageSuggestionParams")) {
                     method.setAccessible(true);
                     return method;
                 }

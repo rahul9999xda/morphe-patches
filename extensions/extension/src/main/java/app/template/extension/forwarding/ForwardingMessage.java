@@ -22,8 +22,8 @@ public final class ForwardingMessage {
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
                              boolean outgoing, boolean secretChat, boolean serviceMessage,
                              boolean protectedContent, Object nativeMessage) {
-        this(accountId, sourceChatId, messageId, text, outgoing, secretChat,
-                serviceMessage, protectedContent, true, nativeMessage);
+        this(accountId, sourceChatId, messageId, text, outgoing, secretChat, serviceMessage,
+                protectedContent, true, nativeMessage);
     }
 
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
@@ -49,7 +49,7 @@ public final class ForwardingMessage {
     public boolean isSecretChat() { return secretChat; }
     public boolean isServiceMessage() { return serviceMessage; }
     public boolean isProtectedContent() { return protectedContent; }
-    public boolean isForwardable() { return forwardable; }
+    public boolean canForward() { return forwardable && !protectedContent; }
     /** Opaque original Telegram object; only a version adapter may interpret it. */
     public Object getNativeMessage() { return nativeMessage; }
 }
