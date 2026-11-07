@@ -6,10 +6,12 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Event-driven forwarding coordinator. It does not create a second Telegram login or service;
- * a native Telegram update hook supplies messages and the gateway uses the active account.
+ * Account-scoped event coordinator for the Telegram 13.1.1 extension foundation.
+ * Events are serialized by the supplied executor; a dispatch is claimed atomically so
+ * duplicate NotificationCenter callbacks cannot race between the recent/in-flight checks.
  */
 public final class ForwardingCoordinator {
     private final ForwardingRuleStore store;
@@ -28,63 +30,86 @@ public final class ForwardingCoordinator {
     }
 
     public void start() { running = true; }
-    public void stop() { running = false; inFlight.clear(); }
+
+    /** Stops accepting/starting queued work. In-flight native sends are allowed to finish. */
+    public void stop() { running = false; }
+
     public boolean isRunning() { return running; }
 
     public void onIncomingMessage(final ForwardingMessage message) {
         if (!running || message == null || message.isOutgoing() || message.isSecretChat()
-                || message.isServiceMessage()) return;
-        executor.execute(new Runnable() {
-            @Override public void run() {
-                if (!running) return;
-                List<ForwardingRule> rules = store.loadRules();
-                if (rules == null) return;
-                for (ForwardingRule rule : rules) {
-                    if (!ForwardingRuleMatcher.matches(rule, message)) continue;
-                    if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                        ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordAutomation(rule.getId());
+                || message.isServiceMessage() || message.isProtectedContent()) return;
+        try {
+            executor.execute(new Runnable() {
+                @Override public void run() {
+                    if (!running) return;
+                    final List<ForwardingRule> rules;
+                    try {
+                        rules = store.loadRules();
+                    } catch (Throwable ignored) {
+                        // A broken preference read must not terminate the executor thread.
+                        return;
                     }
-                    for (Long destination : rule.getDestinationChatIds()) {
-                        if (destination == null || destination.longValue() == message.getSourceChatId()) continue;
-                        dispatch(rule, message, destination.longValue());
+                    if (rules == null) return;
+                    for (ForwardingRule rule : rules) {
+                        if (!running) return;
+                        if (rule == null) continue;
+                        final boolean matches;
+                        try {
+                            matches = ForwardingRuleMatcher.matches(rule, message);
+                        } catch (Throwable ignored) {
+                            // Isolate a malformed rule; continue evaluating the remaining rules.
+                            continue;
+                        }
+                        if (!matches) continue;
+                        Set<Long> destinations = rule.getDestinationChatIds();
+                        if (destinations == null) continue;
+                        for (Long destination : destinations) {
+                            if (!running) return;
+                            if (destination == null || destination.longValue() == message.getSourceChatId()) continue;
+                            dispatch(rule, message, destination.longValue());
+                        }
                     }
                 }
-            }
-        });
+            });
+        } catch (RuntimeException rejected) {
+            // Executor shutdown/rejection is contained; the next native update can retry.
+        }
     }
 
     private void dispatch(final ForwardingRule rule, final ForwardingMessage message, final long destination) {
         final String key = message.getAccountId() + ":" + rule.getId() + ":" + message.getSourceChatId()
                 + ":" + message.getMessageId() + ":" + destination;
+
+        // The recent-key check, in-flight claim and recent-key insertion form one atomic action.
         synchronized (recentlyDispatched) {
-            if (recentlyDispatched.contains(key)) return;
+            if (recentlyDispatched.contains(key) || !inFlight.add(key)) return;
             recentlyDispatched.add(key);
             while (recentlyDispatched.size() > MAX_RECENT_KEYS) {
                 String oldest = recentlyDispatched.iterator().next();
                 recentlyDispatched.remove(oldest);
             }
         }
-        if (!inFlight.add(key)) return;
+
+        final AtomicBoolean completed = new AtomicBoolean(false);
         TelegramMessageGateway.ResultCallback callback = new TelegramMessageGateway.ResultCallback() {
             @Override public void onSuccess() {
+                if (!completed.compareAndSet(false, true)) return;
                 inFlight.remove(key);
-                if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore stats =
-                            (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
-                    if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) stats.recordCopied(rule.getId());
-                    else stats.recordForwarded(rule.getId());
-                }
+                // Keep the recent key after success to suppress duplicate native update delivery.
             }
             @Override public void onFailure(Throwable error) {
+                if (!completed.compareAndSet(false, true)) return;
                 inFlight.remove(key);
                 synchronized (recentlyDispatched) { recentlyDispatched.remove(key); }
             }
         };
         try {
             if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
-                gateway.copy(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                gateway.copy(message.getAccountId(), message, destination, callback);
             } else {
-                gateway.forward(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                gateway.forward(message.getAccountId(), message.getSourceChatId(),
+                        message.getMessageId(), destination, callback);
             }
         } catch (Throwable error) {
             callback.onFailure(error);
