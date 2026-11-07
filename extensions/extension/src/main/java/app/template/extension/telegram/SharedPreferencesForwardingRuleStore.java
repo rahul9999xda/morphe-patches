@@ -46,8 +46,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                         readStrings(item.optJSONArray("exclude")),
                         "ALL".equals(item.optString("match")) ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                         item.optBoolean("caseSensitive", false),
-                        "COPY".equals(item.optString("delivery")) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                        item.optBoolean("showSenderName", false)));
+                        "COPY".equals(item.optString("delivery")) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD));
             }
         } catch (Throwable ignored) { }
         return result;
@@ -69,40 +68,10 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                 item.put("match", rule.getMatchMode().name());
                 item.put("caseSensitive", rule.isCaseSensitive());
                 item.put("delivery", rule.getDeliveryMode().name());
-                item.put("showSenderName", rule.isShowSenderName());
                 array.put(item);
             } catch (Throwable ignored) { }
         }
         preferences.edit().putString("rules", array.toString()).apply();
-    }
-
-    public synchronized void recordAutomation(String ruleId) { increment(ruleId, "automation"); }
-    public synchronized void recordForwarded(String ruleId) { increment(ruleId, "forwarded"); }
-    public synchronized void recordCopied(String ruleId) { increment(ruleId, "copied"); }
-
-    /** Reset this rule's counters only; rules and statistics for other IDs remain untouched. */
-    public synchronized void resetStats(String ruleId) {
-        if (ruleId == null || ruleId.trim().isEmpty()) return;
-        try {
-            JSONObject root = new JSONObject(preferences.getString("rule_stats", "{}"));
-            root.remove(ruleId);
-            preferences.edit().putString("rule_stats", root.toString()).apply();
-        } catch (Throwable ignored) { }
-    }
-
-    public synchronized long getCount(String ruleId, String metric) {
-        try { JSONObject obj = new JSONObject(preferences.getString("rule_stats", "{}")).optJSONObject(ruleId); return obj == null ? 0 : obj.optLong(metric, 0); }
-        catch (Throwable ignored) { return 0; }
-    }
-    private void increment(String ruleId, String metric) {
-        try {
-            JSONObject root = new JSONObject(preferences.getString("rule_stats", "{}"));
-            JSONObject stats = root.optJSONObject(ruleId);
-            if (stats == null) stats = new JSONObject();
-            stats.put(metric, stats.optLong(metric, 0) + 1);
-            root.put(ruleId, stats);
-            preferences.edit().putString("rule_stats", root.toString()).apply();
-        } catch (Throwable ignored) { }
     }
 
     private static Set<Long> readLongs(JSONArray array) {

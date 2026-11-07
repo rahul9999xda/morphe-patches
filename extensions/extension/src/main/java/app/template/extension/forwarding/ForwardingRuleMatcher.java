@@ -10,11 +10,13 @@ public final class ForwardingRuleMatcher {
     public static boolean matches(ForwardingRule rule, ForwardingMessage message) {
         if (rule == null || message == null || !rule.isEnabled()) return false;
         if (!rule.getSourceChatIds().contains(message.getSourceChatId())) return false;
-        if (message.isOutgoing() || message.isSecretChat() || message.isServiceMessage()) return false;
-        // Protected text can be copied when the user's separate content-restriction
-        // patch permits it. Native FORWARD remains subject to Telegram's eligibility.
-        if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.FORWARD && !message.canForward()) return false;
-        if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY && message.getText().trim().isEmpty()) return false;
+        if (message.isOutgoing() || message.isSecretChat() || message.isServiceMessage()
+                || message.isProtectedContent()) return false;
+        // Native forwardability is a FORWARD-only constraint. COPY uses Telegram's
+        // SendMessageParams.of(MessageObject) path and must not be rejected merely
+        // because canForwardMessage() is false for the original post.
+        if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.FORWARD
+                && !message.isForwardable()) return false;
 
         String body = normalize(message.getText(), rule.isCaseSensitive());
         for (String excluded : rule.getExcludeKeywords()) {
@@ -22,6 +24,7 @@ public final class ForwardingRuleMatcher {
         }
 
         List<String> included = rule.getIncludeKeywords();
+        // Empty-text/media-only posts match rules with no include-keyword condition.
         if (included.isEmpty()) return true;
         if (rule.getMatchMode() == ForwardingRule.MatchMode.ALL) {
             for (String keyword : included) {
