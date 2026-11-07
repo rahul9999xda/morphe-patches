@@ -439,7 +439,7 @@ public final class MorpheSettingsActivity extends Activity {
                 return;
             }
             List<ForwardingRule> rules = new ArrayList<>(store.loadAllRules());
-            ForwardingRule rule = new ForwardingRule(editingRuleId == null ? UUID.randomUUID().toString() : editingRuleId, name, true,
+            ForwardingRule rule = new ForwardingRule(editingRuleId == null ? UUID.randomUUID().toString() : editingRuleId, name, editingRuleId == null || findRuleEnabled(editingRuleId),
                     sources, destinations, parseWords(text(includeInput)), parseWords(text(excludeInput)),
                     matchSpinner.getSelectedItemPosition() == 1 ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                     caseSensitiveSwitch.isChecked(), deliverySpinner.getSelectedItemPosition() == 1
@@ -483,15 +483,33 @@ public final class MorpheSettingsActivity extends Activity {
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
             detailsParams.topMargin = dp(5);
             item.addView(details, detailsParams);
-            Button edit = button("Edit rule");
-            LinearLayout.LayoutParams editParams = params(-1, dp(40));
-            editParams.topMargin = dp(8);
-            item.addView(edit, editParams);
+            TextView state = label(rule.isEnabled() ? "Rule is active" : "Rule is paused", rule.isEnabled() ? 0xff2e9d62 : 0xffd58a24);
+            state.setTag("rule_state_" + rule.getId());
+            state.setTextSize(12);
+            state.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            LinearLayout.LayoutParams stateParams = params(-1, -2);
+            stateParams.topMargin = dp(4);
+            item.addView(state, stateParams);
+
+            LinearLayout firstRow = actionRow();
+            Button edit = compactButton("Edit");
+            Button pause = compactButton(rule.isEnabled() ? "Pause rule" : "Restart rule");
+            firstRow.addView(edit, actionParams());
+            firstRow.addView(pause, actionParams());
+            LinearLayout.LayoutParams rowParams = params(-1, dp(42));
+            rowParams.topMargin = dp(8);
+            item.addView(firstRow, rowParams);
             edit.setOnClickListener(v -> loadRuleForEdit(rule));
-            Button reset = button("Reset automation counter");
-            LinearLayout.LayoutParams resetParams = params(-1, dp(40));
-            resetParams.topMargin = dp(8);
-            item.addView(reset, resetParams);
+            pause.setOnClickListener(v -> setRuleEnabled(rule, !rule.isEnabled()));
+
+            LinearLayout secondRow = actionRow();
+            Button reset = compactButton("Reset counter");
+            Button remove = compactButton("Remove");
+            secondRow.addView(reset, actionParams());
+            secondRow.addView(remove, actionParams());
+            LinearLayout.LayoutParams secondRowParams = params(-1, dp(42));
+            secondRowParams.topMargin = dp(6);
+            item.addView(secondRow, secondRowParams);
             reset.setOnClickListener(v -> new AlertDialog.Builder(this)
                     .setTitle("Reset automation counter?")
                     .setMessage("This resets Automation and the selected delivery counter for this rule to zero. It does not change the rule.")
@@ -501,10 +519,6 @@ public final class MorpheSettingsActivity extends Activity {
                         refreshRuleStats();
                         Toast.makeText(this, "Rule counters reset", Toast.LENGTH_SHORT).show();
                     }).show());
-            Button remove = button("Remove rule");
-            LinearLayout.LayoutParams removeParams = params(-1, dp(40));
-            removeParams.topMargin = dp(8);
-            item.addView(remove, removeParams);
             remove.setOnClickListener(v -> {
                 List<ForwardingRule> current = new ArrayList<>(store.loadAllRules());
                 ArrayList<ForwardingRule> kept = new ArrayList<>();
@@ -518,6 +532,47 @@ public final class MorpheSettingsActivity extends Activity {
         }
     }
 
+
+    private LinearLayout actionRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        return row;
+    }
+
+    private LinearLayout.LayoutParams actionParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        p.leftMargin = dp(3);
+        p.rightMargin = dp(3);
+        return p;
+    }
+
+    private Button compactButton(String text) {
+        Button b = button(text);
+        b.setTextSize(12);
+        b.setMinHeight(0);
+        b.setMinimumHeight(dp(34));
+        b.setPadding(dp(6), 0, dp(6), 0);
+        return b;
+    }
+
+    private boolean findRuleEnabled(String id) {
+        for (ForwardingRule r : store.loadAllRules()) if (r.getId().equals(id)) return r.isEnabled();
+        return true;
+    }
+
+    private void setRuleEnabled(ForwardingRule target, boolean enabled) {
+        ArrayList<ForwardingRule> updated = new ArrayList<>();
+        for (ForwardingRule r : store.loadAllRules()) {
+            if (!r.getId().equals(target.getId())) { updated.add(r); continue; }
+            updated.add(new ForwardingRule(r.getId(), r.getName(), enabled, r.getSourceChatIds(),
+                    r.getDestinationChatIds(), r.getIncludeKeywords(), r.getExcludeKeywords(),
+                    r.getMatchMode(), r.isCaseSensitive(), r.getDeliveryMode(), r.isShowSenderName()));
+        }
+        store.saveRules(updated);
+        refreshRules();
+        Toast.makeText(this, enabled ? "Rule restarted" : "Rule paused", Toast.LENGTH_SHORT).show();
+    }
 
     private String ruleDetailsText(ForwardingRule rule) {
         String deliveryCount = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY

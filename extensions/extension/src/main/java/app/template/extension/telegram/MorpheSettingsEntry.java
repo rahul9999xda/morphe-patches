@@ -32,14 +32,11 @@ public final class MorpheSettingsEntry {
 
         TextView logo = new TextView(context);
         logo.setText("🧩");
-        logo.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25);
-        logo.setTextColor(Color.WHITE);
+        logo.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        logo.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff777777));
         logo.setGravity(Gravity.CENTER);
-        GradientDrawable logoBackground = new GradientDrawable();
-        logoBackground.setColor(Color.rgb(105, 79, 210));
-        logoBackground.setCornerRadius(dp(context, 12));
-        logo.setBackground(logoBackground);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(context, 44), dp(context, 44)));
+        logo.setBackground(null);
+        row.addView(logo, new LinearLayout.LayoutParams(dp(context, 24), dp(context, 24)));
 
         LinearLayout labels = new LinearLayout(context);
         labels.setOrientation(LinearLayout.VERTICAL);

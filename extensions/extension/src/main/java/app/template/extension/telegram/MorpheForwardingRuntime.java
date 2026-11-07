@@ -164,7 +164,10 @@ public final class MorpheForwardingRuntime {
             if (ownerType.getField("action").get(owner) != null) return null; // service messages
             boolean protectedContent = ownerType.getField("noforwards").getBoolean(owner);
             if (isSecretDialog(dialogId)) return null;
-            boolean forwardable = Boolean.TRUE.equals(type.getMethod("canForwardMessage").invoke(messageObject));
+            // canForwardMessage() is a UI capability heuristic and can return false for
+            // channel/media-caption combinations that Telegram's native forward dialog accepts.
+            // Keep explicit protected-content enforcement; let SendMessagesHelper validate delivery.
+            boolean forwardable = !protectedContent;
             int messageId = ((Number) type.getMethod("getId").invoke(messageObject)).intValue();
             String text = "";
             try {
