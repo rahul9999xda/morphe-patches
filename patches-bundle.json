@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-08T15:42:04",
-  "description": "## [1.18.0-dev2](https://github.com/rahul9999xda/morphe-patches/compare/v1.18.0-dev1...v1.18.0-dev2) (2026-11-08)\n### ✨ New Features\n\n* **telegram:** add unified Morphe settings and forwarding automation ([85187a4](https://github.com/rahul9999xda/morphe-patches/commit/85187a4ec48cf51fc15920b4a5ed00eb65367b80))\n",
-  "download_url": "https://github.com/rahul9999xda/morphe-patches/releases/download/v1.18.0-dev2/patches-1.18.0-dev2.mpp",
+  "created_at": "2026-11-08T15:53:01",
+  "description": "## [1.18.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.17.0...v1.18.0) (2026-11-08)\n### ✨ New Features\n\n* **telegram:** add unified Morphe settings and forwarding automation ([85187a4](https://github.com/rahul9999xda/morphe-patches/commit/85187a4ec48cf51fc15920b4a5ed00eb65367b80))\n",
+  "download_url": "https://github.com/rahul9999xda/morphe-patches/releases/download/v1.18.0/patches-1.18.0.mpp",
   "signature_download_url": "",
-  "version": "1.18.0-dev2"
+  "version": "1.18.0"
 }
