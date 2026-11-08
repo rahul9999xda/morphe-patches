@@ -8,7 +8,7 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.iface.MutableMethod
 import org.w3c.dom.Element
 
 // Verified against the supplied Telegram 13.1.1 build 72371 APK.
@@ -80,7 +80,7 @@ private fun settingsRowInstructions(componentClass: String): String = """
  * two RETURN_VOID sites: one early exit and one normal completion. Insert in reverse
  * index order so earlier instruction indices remain stable.
  */
-private fun addRowAtEveryReturn(method: Method, componentClass: String) {
+private fun addRowAtEveryReturn(method: MutableMethod, componentClass: String) {
     val implementation = requireNotNull(method.implementation) {
         "Settings builder ${method.definingClass}->${method.name} has no implementation"
     }
