@@ -78,10 +78,10 @@ public final class MorpheSettingsActivity extends Activity {
 
     private void buildScreen() {
         // Follow Telegram's currently selected palette (including custom themes).
-        final int background = telegramColor("key_windowBackgroundGray", isDark() ? 0xff171717 : 0xfff7f7fb);
-        final int surface = telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE);
-        final int primary = telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124);
-        final int secondary = telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffb8b8b8 : 0xff666a73);
+        final int background = 0xfff1f1f3;
+        final int surface = Color.WHITE;
+        final int primary = 0xff202124;
+        final int secondary = 0xff666666;
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(18), dp(16), dp(18), dp(28));
@@ -136,12 +136,12 @@ public final class MorpheSettingsActivity extends Activity {
         includeInput = addInput(form, "Include keywords (optional)", "Comma-separated words or phrases");
         excludeInput = addInput(form, "Exclude keywords (optional)", "Comma-separated words or phrases");
 
-        TextView matchLabel = label("Keyword matching", secondary);
+        TextView matchLabel = label("Keyword matching", primary);
         form.addView(matchLabel, params(-1, -2));
         matchSpinner = spinner(new String[]{"Match any included keyword", "Match all included keywords"});
         form.addView(matchSpinner, params(-1, dp(48)));
 
-        TextView deliveryLabel = label("Delivery mode", secondary);
+        TextView deliveryLabel = label("Delivery mode", primary);
         LinearLayout.LayoutParams deliveryLabelParams = params(-1, -2);
         deliveryLabelParams.topMargin = dp(12);
         form.addView(deliveryLabel, deliveryLabelParams);
@@ -473,11 +473,11 @@ public final class MorpheSettingsActivity extends Activity {
             LinearLayout item = new LinearLayout(this);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setPadding(dp(14), dp(12), dp(14), dp(12));
-            item.setBackground(roundBackground(telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE), dp(14)));
-            TextView name = label(rule.getName(), telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff2f2f2 : 0xff202124));
+            item.setBackground(roundBackground(Color.WHITE, dp(14)));
+            TextView name = label(rule.getName(), 0xff202124);
             name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.addView(name, params(-1, -2));
-            TextView details = label(ruleDetailsText(rule), telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffbdbdbd : 0xff666a73));
+            TextView details = label(ruleDetailsText(rule), 0xff666666);
             details.setTextSize(12);
             ruleStatsViews.put(rule.getId(), details);
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
@@ -623,12 +623,15 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private EditText addInput(LinearLayout parent, String label, String hint) {
-        TextView heading = label(label, telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffbdbdbd : 0xff666a73));
+        TextView heading = label(label, 0xff202124);
         parent.addView(heading, params(-1, -2));
         EditText input = new EditText(this);
         input.setSingleLine(false);
         input.setTextSize(14);
         input.setHint(hint);
+        input.setTextColor(0xff202124);
+        input.setHintTextColor(0xff777777);
+        input.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff888888));
         input.setPadding(dp(10), dp(8), dp(10), dp(8));
         LinearLayout.LayoutParams p = params(-1, -2);
         p.topMargin = dp(3);
@@ -639,7 +642,19 @@ public final class MorpheSettingsActivity extends Activity {
 
     private Spinner spinner(String[] options) {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, Arrays.asList(options));
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, Arrays.asList(options)) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                view.setTextColor(0xff202124);
+                return view;
+            }
+            @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                view.setTextColor(0xff202124);
+                view.setBackgroundColor(Color.WHITE);
+                return view;
+            }
+        };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         return spinner;
@@ -656,6 +671,8 @@ public final class MorpheSettingsActivity extends Activity {
     private Button button(String text) {
         Button button = new Button(this);
         button.setText(text);
+        button.setTextColor(0xff202124);
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xffd6d8d8));
         return button;
     }
 
@@ -694,29 +711,5 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private static String text(EditText input) { return input.getText() == null ? "" : input.getText().toString().trim(); }
-    private boolean isDark() { return (getResources().getConfiguration().uiMode & 0x30) == 0x20; }
-
-    /** Use stable Android theme attributes and the active light/dark palette fallback. */
-    private int telegramColor(String keyName, int fallback) {
-        final int attribute;
-        if ("key_windowBackgroundWhiteBlackText".equals(keyName)) {
-            attribute = android.R.attr.textColorPrimary;
-        } else if ("key_windowBackgroundWhiteGrayText2".equals(keyName)) {
-            attribute = android.R.attr.textColorSecondary;
-        } else {
-            attribute = android.R.attr.colorBackground;
-        }
-        android.util.TypedValue value = new android.util.TypedValue();
-        if (getTheme().resolveAttribute(attribute, value, true)) {
-            if (value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
-                    && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT) return value.data;
-            if (value.resourceId != 0) {
-                try { return getResources().getColor(value.resourceId); }
-                catch (Throwable ignored) { }
-            }
-        }
-        return fallback;
-    }
-
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }
