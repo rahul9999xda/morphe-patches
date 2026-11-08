@@ -80,44 +80,53 @@ val telegramMorpheSettingsPatch = bytecodePatch(
         val telegramMethod = telegramSettingsRowsFingerprint.methodOrNull
         val webMethod = telegramWebSettingsRowsFingerprint.methodOrNull
         val plusMethod = plusSettingsRowsFingerprint.methodOrNull
+        val telegramRowInstructions = """
+            sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+            invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+            move-result-object v0
+            invoke-static {v0}, Lorg/telegram/ui/Components/r71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/r71;
+            move-result-object v2
+            invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+        """.trimIndent()
+        val webRowInstructions = """
+            sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+            invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+            move-result-object v0
+            invoke-static {v0}, Lorg/telegram/ui/Components/g71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/g71;
+            move-result-object v2
+            invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+        """.trimIndent()
+        val plusRowInstructions = """
+            sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+            invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+            move-result-object v0
+            invoke-static {v0}, Lorg/telegram/ui/Components/qb2;->C(Landroid/view/View;)Lorg/telegram/ui/Components/qb2;
+            move-result-object v2
+            invoke-virtual {p1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+        """.trimIndent()
         when {
-            // Telegram 13.1.1: the View wrapper is r71.l(View), not g71.l(View).
-            // This distinction was checked against the supplied 72371 DEX.
             telegramMethod != null -> telegramMethod.addInstructions(
-                telegramMethod.implementation!!.instructions.size - 1,
-                """
-                    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
-                    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
-                    move-result-object v0
-                    invoke-static {v0}, Lorg/telegram/ui/Components/r71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/r71;
-                    move-result-object v2
-                    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
-                """.trimIndent(),
+                telegramMethod.implementation!!.instructions.size - 1, telegramRowInstructions,
             )
-            // Telegram Web 13.1.1: g71.l(View) is the verified adapter factory.
             webMethod != null -> webMethod.addInstructions(
-                webMethod.implementation!!.instructions.size - 1,
-                """
-                    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
-                    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
-                    move-result-object v0
-                    invoke-static {v0}, Lorg/telegram/ui/Components/g71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/g71;
-                    move-result-object v2
-                    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
-                """.trimIndent(),
+                webMethod.implementation!!.instructions.size - 1, webRowInstructions,
             )
-            // Plus Messenger 13.1.1.0: qb2.C(View) is the verified adapter factory.
-            plusMethod != null -> plusMethod.addInstructions(
-                plusMethod.implementation!!.instructions.size - 1,
-                """
-                    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
-                    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
-                    move-result-object v0
-                    invoke-static {v0}, Lorg/telegram/ui/Components/qb2;->C(Landroid/view/View;)Lorg/telegram/ui/Components/qb2;
-                    move-result-object v2
-                    invoke-virtual {p1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
-                """.trimIndent(),
-            )
+            plusMethod != null -> {
+                // Plus 13.1.1.0's Z0(ArrayList, mc2) has two distinct return paths.
+                // The previous end-only injection was skipped by the early-return path.
+                // Add the row before BOTH returns, processing descending indices so the
+                // earlier instruction positions remain stable after each insertion.
+                val instructions = plusMethod.implementation!!.instructions
+                val returnIndexes = instructions.mapIndexedNotNull { index, instruction ->
+                    index.takeIf { instruction.opcode.name == "RETURN_VOID" }
+                }.sortedDescending()
+                require(returnIndexes.size == 2) {
+                    "Unexpected Plus da4.Z0() control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
+                }
+                returnIndexes.forEach { index ->
+                    plusMethod.addInstructions(index, plusRowInstructions)
+                }
+            }
             else -> error("Could not resolve Telegram 13.1.1 Settings builder (p91/t91/da4)")
         }
 
