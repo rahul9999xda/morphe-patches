@@ -2,13 +2,13 @@ package app.template.patches.telegram.settings
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.instructionsOrNull
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.MutableMethod
 import org.w3c.dom.Element
 
 // Verified against the supplied Telegram 13.1.1 build 72371 APK.
@@ -80,22 +80,6 @@ private fun settingsRowInstructions(componentClass: String): String = """
  * two RETURN_VOID sites: one early exit and one normal completion. Insert in reverse
  * index order so earlier instruction indices remain stable.
  */
-private fun addRowAtEveryReturn(method: MutableMethod, componentClass: String) {
-    val implementation = requireNotNull(method.implementation) {
-        "Settings builder ${method.definingClass}->${method.name} has no implementation"
-    }
-    val returnIndexes = implementation.instructions.mapIndexedNotNull { index, instruction ->
-        index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
-    }
-    require(returnIndexes.size == 2) {
-        "Unexpected ${method.definingClass}->${method.name} control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
-    }
-    require(implementation.registerCount >= 22) {
-        "Unexpected ${method.definingClass}->${method.name} register layout: expected at least 22 registers, found ${implementation.registerCount}"
-    }
-    val instructions = settingsRowInstructions(componentClass)
-    returnIndexes.asReversed().forEach { index -> method.addInstructions(index, instructions) }
-}
 
 @Suppress("unused")
 val telegramMorpheSettingsPatch = bytecodePatch(
@@ -106,12 +90,53 @@ val telegramMorpheSettingsPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch)
 
     execute {
+/**
+ * Resolve the editable method through the patcher's mutable class API. Fingerprint.methodOrNull
+ * returns a read-only Method in this Morphe Patcher version, so it must only be used to
+ * establish that the target exists; mutations are performed on mutableClassDefBy(...).
+ */
+fun patchSettingsBuilder(
+    targetClass: String,
+    targetMethod: String,
+    componentClass: String,
+) {
+    classDefForEach { classDef ->
+        if (classDef.type != targetClass) return@classDefForEach
+
+        val mutableMethod = mutableClassDefBy(classDef).methods.firstOrNull { method ->
+            method.name == targetMethod &&
+                method.parameterTypes.map { it.toString() } == listOf(targetClass, "Ljava/util/ArrayList;") &&
+                method.returnType == "V"
+        } ?: error("Could not resolve editable settings builder $targetClass->$targetMethod")
+
+        val implementation = requireNotNull(mutableMethod.instructionsOrNull) {
+            "Settings builder $targetClass->$targetMethod has no implementation"
+        }
+        val returnIndexes = implementation.mapIndexedNotNull { index, instruction ->
+            index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
+        }
+        require(returnIndexes.size == 2) {
+            "Unexpected $targetClass->$targetMethod control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
+        }
+        require(mutableMethod.implementation!!.registerCount >= 22) {
+            "Unexpected $targetClass->$targetMethod register layout: expected at least 22 registers, found ${mutableMethod.implementation!!.registerCount}"
+        }
+        val instructions = settingsRowInstructions(componentClass)
+        returnIndexes.asReversed().forEach { index ->
+            mutableMethod.addInstructions(index, instructions)
+        }
+    }
+}
+
+
         val telegramMethod = telegramSettingsRowsFingerprint.methodOrNull
         val webMethod = telegramWebSettingsRowsFingerprint.methodOrNull
 
         when {
-            telegramMethod != null && webMethod == null -> addRowAtEveryReturn(telegramMethod, "r71")
-            webMethod != null && telegramMethod == null -> addRowAtEveryReturn(webMethod, "g71")
+            telegramMethod != null && webMethod == null ->
+                patchSettingsBuilder("Lorg/telegram/ui/p91;", "b0", "r71")
+            webMethod != null && telegramMethod == null ->
+                patchSettingsBuilder("Lorg/telegram/ui/t91;", "b0", "g71")
             telegramMethod == null && webMethod == null -> error(
                 "Could not resolve Telegram 13.1.1 Settings builder (p91/t91). Check APK version and fingerprints."
             )
@@ -120,19 +145,25 @@ val telegramMorpheSettingsPatch = bytecodePatch(
             )
         }
 
-        val startupMethod = requireNotNull(postInitApplicationFingerprint.methodOrNull) {
+        requireNotNull(postInitApplicationFingerprint.methodOrNull) {
             "Missing ApplicationLoader.postInitApplication()V"
         }
-        val startupImplementation = requireNotNull(startupMethod.implementation) {
-            "ApplicationLoader.postInitApplication()V has no implementation"
+        classDefForEach { classDef ->
+            if (classDef.type != "Lorg/telegram/messenger/ApplicationLoader;") return@classDefForEach
+            val startupMethod = mutableClassDefBy(classDef).methods.firstOrNull {
+                it.name == "postInitApplication" && it.parameterTypes.isEmpty() && it.returnType == "V"
+            } ?: error("Could not resolve editable ApplicationLoader.postInitApplication()V")
+            val startupInstructions = requireNotNull(startupMethod.instructionsOrNull) {
+                "ApplicationLoader.postInitApplication()V has no implementation"
+            }
+            val startupReturns = startupInstructions.count { it.opcode == Opcode.RETURN_VOID }
+            require(startupReturns == 1) {
+                "Unexpected ApplicationLoader.postInitApplication()V control flow: expected 1 RETURN_VOID site, found $startupReturns"
+            }
+            startupMethod.addInstructions(
+                startupInstructions.size - 1,
+                "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V",
+            )
         }
-        val startupReturns = startupImplementation.instructions.count { it.opcode == Opcode.RETURN_VOID }
-        require(startupReturns == 1) {
-            "Unexpected ApplicationLoader.postInitApplication()V control flow: expected 1 RETURN_VOID site, found $startupReturns"
-        }
-        startupMethod.addInstructions(
-            startupImplementation.instructions.size - 1,
-            "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V",
-        )
     }
 }
