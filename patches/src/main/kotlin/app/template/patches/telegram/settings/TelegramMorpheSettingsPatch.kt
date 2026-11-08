@@ -118,7 +118,7 @@ val telegramMorpheSettingsPatch = bytecodePatch(
                 // earlier instruction positions remain stable after each insertion.
                 val instructions = plusMethod.implementation!!.instructions
                 val returnIndexes = instructions.mapIndexedNotNull { index, instruction ->
-                    index.takeIf { instruction.opcode.name == "RETURN_VOID" }
+                    index.takeIf { instruction.opcode.name == "return-void" }
                 }.sortedDescending()
                 require(returnIndexes.size == 2) {
                     "Unexpected Plus da4.Z0() control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
