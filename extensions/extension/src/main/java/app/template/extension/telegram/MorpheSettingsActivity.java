@@ -77,11 +77,11 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private void buildScreen() {
-        final boolean dark = (getResources().getConfiguration().uiMode & 0x30) == 0x20;
-        final int background = dark ? 0xff171717 : 0xfff7f7fb;
-        final int surface = dark ? 0xff242424 : Color.WHITE;
-        final int primary = dark ? 0xfff3f3f3 : 0xff202124;
-        final int secondary = dark ? 0xffb8b8b8 : 0xff666a73;
+        // Follow Telegram's currently selected palette (including custom themes).
+        final int background = telegramColor("key_windowBackgroundGray", isDark() ? 0xff171717 : 0xfff7f7fb);
+        final int surface = telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE);
+        final int primary = telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124);
+        final int secondary = telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffb8b8b8 : 0xff666a73);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(18), dp(16), dp(18), dp(28));
@@ -473,11 +473,11 @@ public final class MorpheSettingsActivity extends Activity {
             LinearLayout item = new LinearLayout(this);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setPadding(dp(14), dp(12), dp(14), dp(12));
-            item.setBackground(roundBackground(isDark() ? 0xff242424 : Color.WHITE, dp(14)));
-            TextView name = label(rule.getName(), isDark() ? 0xfff2f2f2 : 0xff202124);
+            item.setBackground(roundBackground(telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE), dp(14)));
+            TextView name = label(rule.getName(), telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff2f2f2 : 0xff202124));
             name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.addView(name, params(-1, -2));
-            TextView details = label(ruleDetailsText(rule), isDark() ? 0xffbdbdbd : 0xff666a73);
+            TextView details = label(ruleDetailsText(rule), telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffbdbdbd : 0xff666a73));
             details.setTextSize(12);
             ruleStatsViews.put(rule.getId(), details);
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
@@ -623,7 +623,7 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private EditText addInput(LinearLayout parent, String label, String hint) {
-        TextView heading = label(label, isDark() ? 0xffbdbdbd : 0xff666a73);
+        TextView heading = label(label, telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffbdbdbd : 0xff666a73));
         parent.addView(heading, params(-1, -2));
         EditText input = new EditText(this);
         input.setSingleLine(false);
@@ -695,5 +695,28 @@ public final class MorpheSettingsActivity extends Activity {
 
     private static String text(EditText input) { return input.getText() == null ? "" : input.getText().toString().trim(); }
     private boolean isDark() { return (getResources().getConfiguration().uiMode & 0x30) == 0x20; }
+
+    /** Use stable Android theme attributes and the active light/dark palette fallback. */
+    private int telegramColor(String keyName, int fallback) {
+        final int attribute;
+        if ("key_windowBackgroundWhiteBlackText".equals(keyName)) {
+            attribute = android.R.attr.textColorPrimary;
+        } else if ("key_windowBackgroundWhiteGrayText2".equals(keyName)) {
+            attribute = android.R.attr.textColorSecondary;
+        } else {
+            attribute = android.R.attr.colorBackground;
+        }
+        android.util.TypedValue value = new android.util.TypedValue();
+        if (getTheme().resolveAttribute(attribute, value, true)) {
+            if (value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                    && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT) return value.data;
+            if (value.resourceId != 0) {
+                try { return getResources().getColor(value.resourceId); }
+                catch (Throwable ignored) { }
+            }
+        }
+        return fallback;
+    }
+
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

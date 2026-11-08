@@ -32,30 +32,15 @@ public final class MorpheSettingsEntry {
         }
         final Context appContext = context;
 
-        // Outer wrapper supplies the same breathing room as Telegram's settings cards.
+        // A single Help-style card. No separate Morphe heading above it.
         LinearLayout section = new LinearLayout(context);
         section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(dp(context, 16), dp(context, 12),
-                dp(context, 16), dp(context, 12));
+        section.setPadding(dp(context, 12), dp(context, 8),
+                dp(context, 12), dp(context, 8));
         section.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        TextView heading = new TextView(context);
-        heading.setText("Morphe");
-        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
-                android.graphics.Typeface.NORMAL));
-        heading.setTextColor(MORPHE_BLUE);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        headingParams.leftMargin = dp(context, 22);
-        headingParams.bottomMargin = dp(context, 10);
-        section.addView(heading, headingParams);
-
-        // Match Telegram Help: plain white/surface card, generous rounded corners,
-        // no outline and no elevation/shadow treatment.
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
@@ -94,7 +79,7 @@ public final class MorpheSettingsEntry {
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL));
-        title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, 0xff202124));
+        title.setTextColor(telegramThemeColor("key_windowBackgroundWhiteBlackText", themeColor(context, android.R.attr.textColorPrimary, 0xff202124)));
         labels.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -102,7 +87,7 @@ public final class MorpheSettingsEntry {
         subtitle.setText("Automatic forwarding and custom options");
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subtitle.setLineSpacing(0f, 1.0f);
-        subtitle.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff666666));
+        subtitle.setTextColor(telegramThemeColor("key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff666666)));
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleParams.topMargin = dp(context, 3);
@@ -111,7 +96,7 @@ public final class MorpheSettingsEntry {
         TextView chevron = new TextView(context);
         chevron.setText("›");
         chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        chevron.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
+        chevron.setTextColor(telegramThemeColor("key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff555555)));
         chevron.setGravity(Gravity.CENTER);
         item.addView(chevron, new LinearLayout.LayoutParams(
                 dp(context, 24), dp(context, 48)));
@@ -205,15 +190,29 @@ public final class MorpheSettingsEntry {
     }
 
     private static android.graphics.drawable.Drawable createCardBackground(Context context) {
-        int pageColor = themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3);
-        double luminance = (0.2126 * Color.red(pageColor)
-                + 0.7152 * Color.green(pageColor)
-                + 0.0722 * Color.blue(pageColor)) / 255.0;
-        int surface = luminance < 0.45 ? 0xff242629 : Color.WHITE;
+        // Resolve Telegram's active theme palette (including custom themes) instead of
+        // guessing from uiMode or forcing a white card in dark mode.
+        int surface = telegramThemeColor("key_windowBackgroundWhite",
+                themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3));
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(surface);
         shape.setCornerRadius(dp(context, 24));
         return shape;
+    }
+
+    private static int telegramThemeColor(String keyName, int fallback) {
+        // Telegram/Web/Plus obfuscate the Theme owner differently. Use stable Android
+        // theme attributes here and the resolved light/dark surface fallback supplied
+        // by the caller; never bind this UI to a fork-specific obfuscated Theme class.
+        final int attribute;
+        if ("key_windowBackgroundWhiteBlackText".equals(keyName)) {
+            attribute = android.R.attr.textColorPrimary;
+        } else if ("key_windowBackgroundWhiteGrayText2".equals(keyName)) {
+            attribute = android.R.attr.textColorSecondary;
+        } else {
+            attribute = android.R.attr.colorBackground;
+        }
+        return fallback;
     }
 
     private static android.graphics.drawable.Drawable selectableBackground(Context context) {

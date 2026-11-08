@@ -80,21 +80,33 @@ val telegramMorpheSettingsPatch = bytecodePatch(
         val telegramMethod = telegramSettingsRowsFingerprint.methodOrNull
         val webMethod = telegramWebSettingsRowsFingerprint.methodOrNull
         val plusMethod = plusSettingsRowsFingerprint.methodOrNull
-        val rowInstructions = """
-            sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
-            invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
-            move-result-object v0
-            invoke-static {v0}, Lorg/telegram/ui/Components/g71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/g71;
-            move-result-object v2
-            invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
-        """.trimIndent()
         when {
+            // Telegram 13.1.1: the View wrapper is r71.l(View), not g71.l(View).
+            // This distinction was checked against the supplied 72371 DEX.
             telegramMethod != null -> telegramMethod.addInstructions(
-                telegramMethod.implementation!!.instructions.size - 1, rowInstructions,
+                telegramMethod.implementation!!.instructions.size - 1,
+                """
+                    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+                    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+                    move-result-object v0
+                    invoke-static {v0}, Lorg/telegram/ui/Components/r71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/r71;
+                    move-result-object v2
+                    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+                """.trimIndent(),
             )
+            // Telegram Web 13.1.1: g71.l(View) is the verified adapter factory.
             webMethod != null -> webMethod.addInstructions(
-                webMethod.implementation!!.instructions.size - 1, rowInstructions,
+                webMethod.implementation!!.instructions.size - 1,
+                """
+                    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+                    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+                    move-result-object v0
+                    invoke-static {v0}, Lorg/telegram/ui/Components/g71;->l(Landroid/view/View;)Lorg/telegram/ui/Components/g71;
+                    move-result-object v2
+                    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+                """.trimIndent(),
             )
+            // Plus Messenger 13.1.1.0: qb2.C(View) is the verified adapter factory.
             plusMethod != null -> plusMethod.addInstructions(
                 plusMethod.implementation!!.instructions.size - 1,
                 """
