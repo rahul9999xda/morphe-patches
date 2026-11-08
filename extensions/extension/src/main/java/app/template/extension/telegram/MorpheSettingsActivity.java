@@ -3,6 +3,7 @@ package app.template.extension.telegram;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -82,6 +83,7 @@ public final class MorpheSettingsActivity extends Activity {
         final int surface = telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE);
         final int primary = telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124);
         final int secondary = telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffb8b8b8 : 0xff666a73);
+        final int accent = telegramColor("key_windowBackgroundWhiteBlueText", isDark() ? 0xff64b5f6 : 0xff168acd);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(18), dp(16), dp(18), dp(28));
@@ -109,6 +111,7 @@ public final class MorpheSettingsActivity extends Activity {
 
         LinearLayout masterCard = card(surface);
         enabledSwitch = new Switch(this);
+        tintSwitch(enabledSwitch);
         enabledSwitch.setText("Enable automatic forwarding");
         enabledSwitch.setTextSize(16);
         enabledSwitch.setTextColor(primary);
@@ -122,7 +125,7 @@ public final class MorpheSettingsActivity extends Activity {
         masterParams.topMargin = dp(18);
         content.addView(masterCard, masterParams);
 
-        addSectionTitle("Create forwarding rule", primary);
+        addSectionTitle("Create forwarding rule", accent);
         LinearLayout form = card(surface);
         nameInput = addInput(form, "Rule name", "e.g. News forwarding");
         sourceInput = addInput(form, "Source chats", "Choose chats or edit dialog IDs");
@@ -149,12 +152,14 @@ public final class MorpheSettingsActivity extends Activity {
         form.addView(deliverySpinner, params(-1, dp(48)));
 
         showSenderSwitch = new Switch(this);
+        tintSwitch(showSenderSwitch);
         showSenderSwitch.setText("Show original sender name (forward mode)");
         showSenderSwitch.setTextColor(primary);
         showSenderSwitch.setTextSize(14);
         form.addView(showSenderSwitch, params(-1, -2));
 
         caseSensitiveSwitch = new Switch(this);
+        tintSwitch(caseSensitiveSwitch);
         caseSensitiveSwitch.setText("Case-sensitive keyword matching");
         caseSensitiveSwitch.setTextColor(primary);
         caseSensitiveSwitch.setTextSize(14);
@@ -172,7 +177,7 @@ public final class MorpheSettingsActivity extends Activity {
         formParams.topMargin = dp(10);
         content.addView(form, formParams);
 
-        addSectionTitle("Your rules", primary);
+        addSectionTitle("Your rules", accent);
         rulesContainer = new LinearLayout(this);
         rulesContainer.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams rulesParams = params(-1, -2);
@@ -623,12 +628,18 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private EditText addInput(LinearLayout parent, String label, String hint) {
-        TextView heading = label(label, telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffbdbdbd : 0xff666a73));
+        TextView heading = label(label, telegramColor("key_windowBackgroundWhiteBlueText", isDark() ? 0xff64b5f6 : 0xff168acd));
         parent.addView(heading, params(-1, -2));
         EditText input = new EditText(this);
         input.setSingleLine(false);
         input.setTextSize(14);
         input.setHint(hint);
+        input.setTextColor(telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124));
+        input.setHintTextColor(telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xffaeb7c2 : 0xff777777));
+        input.setBackgroundTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+                new int[]{telegramColor("key_windowBackgroundWhiteBlueText", isDark() ? 0xff64b5f6 : 0xff168acd),
+                        telegramColor("key_windowBackgroundWhiteGrayText2", isDark() ? 0xff89939f : 0xff888888)}));
         input.setPadding(dp(10), dp(8), dp(10), dp(8));
         LinearLayout.LayoutParams p = params(-1, -2);
         p.topMargin = dp(3);
@@ -639,7 +650,19 @@ public final class MorpheSettingsActivity extends Activity {
 
     private Spinner spinner(String[] options) {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, Arrays.asList(options));
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, Arrays.asList(options)) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                view.setTextColor(telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124));
+                return view;
+            }
+            @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                view.setTextColor(telegramColor("key_windowBackgroundWhiteBlackText", isDark() ? 0xfff3f3f3 : 0xff202124));
+                view.setBackgroundColor(telegramColor("key_windowBackgroundWhite", isDark() ? 0xff242424 : Color.WHITE));
+                return view;
+            }
+        };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         return spinner;
@@ -656,6 +679,9 @@ public final class MorpheSettingsActivity extends Activity {
     private Button button(String text) {
         Button button = new Button(this);
         button.setText(text);
+        int accent = telegramColor("key_windowBackgroundWhiteBlueText", isDark() ? 0xff64b5f6 : 0xff168acd);
+        button.setTextColor(contrastColor(accent));
+        button.setBackgroundTintList(ColorStateList.valueOf(accent));
         return button;
     }
 
@@ -696,9 +722,24 @@ public final class MorpheSettingsActivity extends Activity {
     private static String text(EditText input) { return input.getText() == null ? "" : input.getText().toString().trim(); }
     private boolean isDark() { return (getResources().getConfiguration().uiMode & 0x30) == 0x20; }
 
-    /** Use stable Android theme attributes and the active light/dark palette fallback. */
+    /**
+     * Resolve Telegram's live palette first. Theme.key_* fields and Theme.getColor(int)
+     * are stable across the three 13.1.1 targets; settings/activity class names are not.
+     */
     private int telegramColor(String keyName, int fallback) {
-        final int attribute;
+        try {
+            Class<?> themeClass = Class.forName("org.telegram.ui.ActionBar.Theme");
+            java.lang.reflect.Field keyField = themeClass.getDeclaredField(keyName);
+            keyField.setAccessible(true);
+            int key = keyField.getInt(null);
+            java.lang.reflect.Method getColor = themeClass.getMethod("getColor", int.class);
+            Object result = getColor.invoke(null, key);
+            if (result instanceof Integer) return (Integer) result;
+        } catch (Throwable ignored) {
+            // Use the Android theme as a safe fallback on forks with changed Theme APIs.
+        }
+
+        int attribute;
         if ("key_windowBackgroundWhiteBlackText".equals(keyName)) {
             attribute = android.R.attr.textColorPrimary;
         } else if ("key_windowBackgroundWhiteGrayText2".equals(keyName)) {
@@ -716,6 +757,30 @@ public final class MorpheSettingsActivity extends Activity {
             }
         }
         return fallback;
+    }
+
+    private void tintSwitch(Switch view) {
+        int accent = telegramColor("key_windowBackgroundWhiteBlueText",
+                isDark() ? 0xff64b5f6 : 0xff168acd);
+        int inactive = telegramColor("key_windowBackgroundWhiteGrayText2",
+                isDark() ? 0xff89939f : 0xff888888);
+        view.setThumbTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                new int[]{accent, isDark() ? 0xffc4cbd3 : 0xffeeeeee}));
+        view.setTrackTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                new int[]{withAlpha(accent, 0.45f), withAlpha(inactive, 0.35f)}));
+    }
+
+    private static int withAlpha(int color, float fraction) {
+        return (color & 0x00ffffff) | (Math.round(Color.alpha(color) * fraction) << 24);
+    }
+
+    private static int contrastColor(int color) {
+        double luminance = (0.2126 * Color.red(color)
+                + 0.7152 * Color.green(color)
+                + 0.0722 * Color.blue(color)) / 255.0;
+        return luminance > 0.58 ? Color.BLACK : Color.WHITE;
     }
 
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }

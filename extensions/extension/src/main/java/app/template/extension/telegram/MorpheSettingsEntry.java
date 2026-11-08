@@ -79,7 +79,7 @@ public final class MorpheSettingsEntry {
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL));
-        title.setTextColor(telegramThemeColor("key_windowBackgroundWhiteBlackText", themeColor(context, android.R.attr.textColorPrimary, 0xff202124)));
+        title.setTextColor(telegramThemeColor(context, "key_windowBackgroundWhiteBlackText", themeColor(context, android.R.attr.textColorPrimary, 0xff202124)));
         labels.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -87,7 +87,7 @@ public final class MorpheSettingsEntry {
         subtitle.setText("Automatic forwarding and custom options");
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subtitle.setLineSpacing(0f, 1.0f);
-        subtitle.setTextColor(telegramThemeColor("key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff666666)));
+        subtitle.setTextColor(telegramThemeColor(context, "key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff666666)));
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleParams.topMargin = dp(context, 3);
@@ -96,7 +96,7 @@ public final class MorpheSettingsEntry {
         TextView chevron = new TextView(context);
         chevron.setText("›");
         chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        chevron.setTextColor(telegramThemeColor("key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff555555)));
+        chevron.setTextColor(telegramThemeColor(context, "key_windowBackgroundWhiteGrayText2", themeColor(context, android.R.attr.textColorSecondary, 0xff555555)));
         chevron.setGravity(Gravity.CENTER);
         item.addView(chevron, new LinearLayout.LayoutParams(
                 dp(context, 24), dp(context, 48)));
@@ -190,27 +190,31 @@ public final class MorpheSettingsEntry {
     }
 
     private static android.graphics.drawable.Drawable createCardBackground(Context context) {
-        // Resolve Telegram's active theme palette (including custom themes) instead of
-        // guessing from uiMode or forcing a white card in dark mode.
-        int surface = telegramThemeColor("key_windowBackgroundWhite",
-                themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3));
+        int fallback = themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3);
+        int surface = telegramThemeColor(context, "key_windowBackgroundWhite", fallback);
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(surface);
         shape.setCornerRadius(dp(context, 24));
         return shape;
     }
 
-    private static int telegramThemeColor(String keyName, int fallback) {
-        // Telegram/Web/Plus obfuscate the Theme owner differently. Use stable Android
-        // theme attributes here and the resolved light/dark surface fallback supplied
-        // by the caller; never bind this UI to a fork-specific obfuscated Theme class.
-        final int attribute;
-        if ("key_windowBackgroundWhiteBlackText".equals(keyName)) {
-            attribute = android.R.attr.textColorPrimary;
-        } else if ("key_windowBackgroundWhiteGrayText2".equals(keyName)) {
-            attribute = android.R.attr.textColorSecondary;
-        } else {
-            attribute = android.R.attr.colorBackground;
+    /**
+     * Telegram forks expose the same Theme palette keys but may obfuscate the
+     * surrounding settings classes differently. Resolve Theme by its stable
+     * package/class and read the named key reflectively; fall back to the
+     * Activity theme when a fork changes that API.
+     */
+    private static int telegramThemeColor(Context context, String keyName, int fallback) {
+        try {
+            Class<?> themeClass = Class.forName("org.telegram.ui.ActionBar.Theme");
+            java.lang.reflect.Field keyField = themeClass.getDeclaredField(keyName);
+            keyField.setAccessible(true);
+            int key = keyField.getInt(null);
+            java.lang.reflect.Method getColor = themeClass.getMethod("getColor", int.class);
+            Object result = getColor.invoke(null, key);
+            if (result instanceof Integer) return (Integer) result;
+        } catch (Throwable ignored) {
+            // Fall through to the host Activity theme.
         }
         return fallback;
     }
