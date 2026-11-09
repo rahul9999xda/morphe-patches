@@ -188,10 +188,18 @@ fun patchSettingsBuilder(
             require(startupReturns == 1) {
                 "Unexpected startup control flow: expected 1 RETURN_VOID site, found $startupReturns"
             }
-            startupMethod.addInstructions(
-                startupInstructions.size - 1,
-                "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V",
-            )
+            val runtimeInstallInstructions = when {
+                currentAndroid != null -> """
+                    const/4 v0, 0x0
+                    invoke-static {v0}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install(I)V
+                """.trimIndent()
+                currentWeb != null -> """
+                    const/4 v0, 0x1
+                    invoke-static {v0}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install(I)V
+                """.trimIndent()
+                else -> "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V"
+            }
+            startupMethod.addInstructions(startupInstructions.size - 1, runtimeInstallInstructions)
         }
     }
 }

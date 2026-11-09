@@ -6,6 +6,7 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.StoriesReadReceiptFlowFingerprint
+import app.template.patches.telegram.StoriesReadReceiptFlowLegacyFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptNormalFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptWebFingerprint
 
@@ -27,7 +28,9 @@ val telegramHideStoriesReadPatch = bytecodePatch(
         val currentR8Method =
             TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull
                 ?: TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull
-        val method = currentR8Method ?: StoriesReadReceiptFlowFingerprint.methodOrNull
+        val method = currentR8Method
+            ?: StoriesReadReceiptFlowFingerprint.methodOrNull
+            ?: StoriesReadReceiptFlowLegacyFingerprint.methodOrNull
         requireNotNull(method) { "No audited Stories read-receipt method matched this APK" }
         method.addInstructions(
             0,
