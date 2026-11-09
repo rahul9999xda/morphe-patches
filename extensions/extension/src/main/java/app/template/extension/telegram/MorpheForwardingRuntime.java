@@ -209,7 +209,8 @@ public final class MorpheForwardingRuntime {
             // A protected message may still enter COPY mode when the user's separate
             // content-restriction patch allows copying. FORWARD is always rejected.
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, protectedContent, !protectedContent, messageObject);
+                    false, false, false, protectedContent, !protectedContent, messageObject,
+                    richText == null ? text : richText);
         } catch (Throwable ignored) { return null; }
     }
 
@@ -265,10 +266,11 @@ public final class MorpheForwardingRuntime {
                             Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
                             Method copyMethod = helperClass.getMethod(mapping.copyMethod, accountClass,
                                     CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
-                            Object richText;
-                            try { richText = nativeMessage.getClass().getField(mapping.messageTextField).get(nativeMessage); }
-                            catch (Throwable missingTextField) { richText = null; }
-                            if (!(richText instanceof CharSequence)) richText = source.getText();
+                            // Preserve the exact styled CharSequence captured from MessageObject.
+                            // Telegram's native send helper converts its spans into MessageEntity
+                            // objects, retaining formatting and embedded URL/TextUrl links.
+                            CharSequence richText = source.getRichText();
+                            if (richText == null) richText = source.getText();
                             copyMethod.invoke(null, accountInstance, richText, 0L, destinationChatId, false, 0, 0);
                         } else {
                             Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);

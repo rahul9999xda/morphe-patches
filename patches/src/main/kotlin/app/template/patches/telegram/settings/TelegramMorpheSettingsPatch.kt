@@ -8,6 +8,7 @@ import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.content.telegramDisableRichHtmlPastePatch
 import com.android.tools.smali.dexlib2.Opcode
 import org.w3c.dom.Element
 
@@ -72,16 +73,15 @@ private val morpheSettingsActivityManifestPatch = resourcePatch(
     }
 }
 
-private fun settingsRowInstructions(componentClass: String, factoryMethod: String, contextField: String): String = """
+private fun settingsRowInstructions(
+    componentClass: String, factoryMethod: String, contextField: String, listRegister: String,
+): String = """
     sget-object v4, $contextField:Landroid/content/Context;
     invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
     move-result-object v0
     invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
-    # v1 is the low-register alias of the ArrayList parameter (p1), copied
-    # at the beginning of this static builder. Use v1 because p1 maps to v23
-    # in this 24-register method and cannot be encoded in invoke-virtual's 35c form.
-    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+    invoke-virtual {$listRegister, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
 /**
@@ -96,7 +96,7 @@ val telegramMorpheSettingsPatch = bytecodePatch(
     description = "Adds Morphe Settings to Telegram Android and Telegram Web and initializes forwarding at startup.",
 ) {
     compatibleWith(TELEGRAM_COMPATIBILITY, TELEGRAM_WEB_COMPATIBILITY)
-    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch)
+    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch, telegramDisableRichHtmlPastePatch)
 
     execute {
 /**
@@ -111,6 +111,7 @@ fun patchSettingsBuilder(
     factoryMethod: String,
     contextField: String,
     minRegisters: Int,
+    listRegister: String,
 ) {
     classDefForEach { classDef ->
         if (classDef.type != targetClass) return@classDefForEach
@@ -133,7 +134,7 @@ fun patchSettingsBuilder(
         require(mutableMethod.implementation!!.registerCount >= minRegisters) {
             "Unexpected $targetClass->$targetMethod register layout: expected at least $minRegisters registers, found ${mutableMethod.implementation!!.registerCount}"
         }
-        val instructions = settingsRowInstructions(componentClass, factoryMethod, contextField)
+        val instructions = settingsRowInstructions(componentClass, factoryMethod, contextField, listRegister)
         returnIndexes.asReversed().forEach { index ->
             mutableMethod.addInstructions(index, instructions)
         }
@@ -148,16 +149,16 @@ fun patchSettingsBuilder(
 
         when {
             currentAndroid != null && currentWeb == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/c51;", "e0", "t41", "m", "Lorg/telegram/messenger/u0;->b", 26,
+                "Lorg/telegram/ui/c51;", "e0", "t41", "m", "Lorg/telegram/messenger/u0;->b", 26, "v1",
             )
             currentWeb != null && currentAndroid == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/h51;", "f0", "m41", "m", "Lorg/telegram/messenger/t0;->b", 24,
+                "Lorg/telegram/ui/h51;", "f0", "m41", "m", "Lorg/telegram/messenger/t0;->b", 24, "v1",
             )
             currentAndroid == null && currentWeb == null && legacyAndroid != null && legacyWeb == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/p91;", "b0", "r71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
+                "Lorg/telegram/ui/p91;", "b0", "r71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22, "p2",
             )
             currentAndroid == null && currentWeb == null && legacyWeb != null && legacyAndroid == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/t91;", "b0", "g71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
+                "Lorg/telegram/ui/t91;", "b0", "g71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22, "p2",
             )
             else -> error("Could not uniquely resolve the Telegram Android or Telegram Web Morphe Settings row builder")
         }
