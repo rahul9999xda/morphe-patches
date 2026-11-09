@@ -6,6 +6,8 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.StoriesReadReceiptFlowFingerprint
+import app.template.patches.telegram.TelegramR8StoriesReadReceiptNormalFingerprint
+import app.template.patches.telegram.TelegramR8StoriesReadReceiptWebFingerprint
 
 @Suppress("unused")
 val telegramHideStoriesReadPatch = bytecodePatch(
@@ -22,7 +24,12 @@ val telegramHideStoriesReadPatch = bytecodePatch(
     execute {
         // The target method returns Z. Returning true preserves its success/handled
         // contract while skipping the local read update and TL_stories_readStories request.
-        StoriesReadReceiptFlowFingerprint.method.addInstructions(
+        val currentR8Method =
+            TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull
+                ?: TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull
+        val method = currentR8Method ?: StoriesReadReceiptFlowFingerprint.methodOrNull
+        requireNotNull(method) { "No audited Stories read-receipt method matched this APK" }
+        method.addInstructions(
             0,
             """
                 const/4 v0, 0x1

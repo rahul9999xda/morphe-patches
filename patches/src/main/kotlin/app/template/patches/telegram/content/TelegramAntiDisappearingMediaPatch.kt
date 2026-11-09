@@ -6,6 +6,18 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretPhotoOrVideoNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSecretPhotoOrVideoWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsVoiceOnceNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsVoiceOnceWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsRoundOnceNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsRoundOnceWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectNeedDrawBlurredPreviewNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectNeedDrawBlurredPreviewWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val isSecretMediaInstanceFingerprint = Fingerprint(
@@ -85,7 +97,25 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        listOf(
+        // Telegram/Web 13.2.1 are R8-renamed. Resolve their exact local methods
+        // separately; Plus keeps its named MessageObject API. The old
+        // shouldEncryptPhotoOrVideo overload is absent from the 13.2.1 R8 classes.
+        val currentR8Methods = listOf(
+            TelegramR8MessageObjectIsSecretMediaNormalFingerprint,
+            TelegramR8MessageObjectIsSecretMediaWebFingerprint,
+            TelegramR8MessageObjectIsSecretMediaStaticNormalFingerprint,
+            TelegramR8MessageObjectIsSecretMediaStaticWebFingerprint,
+            TelegramR8MessageObjectIsSecretPhotoOrVideoNormalFingerprint,
+            TelegramR8MessageObjectIsSecretPhotoOrVideoWebFingerprint,
+            TelegramR8MessageObjectIsVoiceOnceNormalFingerprint,
+            TelegramR8MessageObjectIsVoiceOnceWebFingerprint,
+            TelegramR8MessageObjectIsRoundOnceNormalFingerprint,
+            TelegramR8MessageObjectIsRoundOnceWebFingerprint,
+            TelegramR8MessageObjectNeedDrawBlurredPreviewNormalFingerprint,
+            TelegramR8MessageObjectNeedDrawBlurredPreviewWebFingerprint,
+        ).mapNotNull { it.methodOrNull }
+
+        val namedMethods = listOf(
             isSecretMediaInstanceFingerprint,
             isSecretMediaStaticFingerprint,
             isSecretPhotoOrVideoFingerprint,
@@ -93,8 +123,14 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             isVoiceOnceFingerprint,
             isRoundOnceFingerprint,
             needDrawBluredPreviewFingerprint,
-        ).forEach { fingerprint ->
-            fingerprint.method.addInstructions(
+        ).mapNotNull { it.methodOrNull }
+
+        val methods = (currentR8Methods + namedMethods).distinct()
+        require(methods.size == 6 || methods.size == 7) {
+            "Expected the six current R8 hooks or seven named Plus hooks, found ${methods.size}"
+        }
+        methods.forEach { method ->
+            method.addInstructions(
                 0,
                 """
                 const/4 v0, 0x0

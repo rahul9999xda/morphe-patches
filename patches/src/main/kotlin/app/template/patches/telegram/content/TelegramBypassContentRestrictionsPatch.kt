@@ -10,6 +10,14 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.TelegramR8IsChatNoForwardsNormalFingerprint
+import app.template.patches.telegram.TelegramR8IsChatNoForwardsWebFingerprint
+import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullNormalFingerprint
+import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullWebFingerprint
+import app.template.patches.telegram.TelegramR8IsPeerNoForwardsNormalFingerprint
+import app.template.patches.telegram.TelegramR8IsPeerNoForwardsWebFingerprint
+import app.template.patches.telegram.TelegramR8CanForwardMessageNormalFingerprint
+import app.template.patches.telegram.TelegramR8CanForwardMessageWebFingerprint
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
@@ -90,20 +98,34 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        listOf(
+        val currentR8Methods = listOf(
+            TelegramR8IsChatNoForwardsNormalFingerprint,
+            TelegramR8IsChatNoForwardsWebFingerprint,
+            TelegramR8IsUserNoForwardsUserFullNormalFingerprint,
+            TelegramR8IsUserNoForwardsUserFullWebFingerprint,
+            TelegramR8IsPeerNoForwardsNormalFingerprint,
+            TelegramR8IsPeerNoForwardsWebFingerprint,
+        ).mapNotNull { it.methodOrNull }
+        val namedMethods = listOf(
             isChatNoForwardsLongFingerprint,
             isChatNoForwardsChatFingerprint,
             isUserNoForwardsLongFingerprint,
             isUserNoForwardsUserFullFingerprint,
             isPeerNoForwardsFingerprint,
-        ).forEach { fingerprint ->
-            fingerprint.method.addInstructions(0, """
+        ).mapNotNull { it.methodOrNull }
+        val noForwardMethods = (currentR8Methods + namedMethods).distinct()
+        require(noForwardMethods.isNotEmpty()) { "No no-forwards controller methods matched" }
+        noForwardMethods.forEach { method ->
+            method.addInstructions(0, """
                 const/4 v0, 0x0
                 return v0
             """)
         }
 
-        canForwardMessageFingerprint.method.addInstructions(0, """
+        val currentCanForward =
+            TelegramR8CanForwardMessageNormalFingerprint.methodOrNull
+                ?: TelegramR8CanForwardMessageWebFingerprint.methodOrNull
+        (currentCanForward ?: canForwardMessageFingerprint.methodOrNull)?.addInstructions(0, """
             const/4 v0, 0x1
             return v0
         """)

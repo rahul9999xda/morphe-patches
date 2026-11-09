@@ -8,6 +8,10 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsFingerprint
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsLegacyFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredWebFingerprint
+import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val messageObjectIsSponsoredFingerprint = Fingerprint(
@@ -48,26 +52,34 @@ val telegramRemoveAdsPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        messageObjectIsSponsoredFingerprint.method.addInstructions(0, """
+        val currentMessageObjectMethod =
+            TelegramR8MessageObjectIsSponsoredNormalFingerprint.methodOrNull
+                ?: TelegramR8MessageObjectIsSponsoredWebFingerprint.methodOrNull
+        val sponsoredMethod = currentMessageObjectMethod
+            ?: messageObjectIsSponsoredFingerprint.methodOrNull
+        requireNotNull(sponsoredMethod) { "Missing MessageObject.isSponsored()Z" }
+        sponsoredMethod.addInstructions(0, """
             const/4 v0, 0x0
             return v0
         """)
 
-        messagesControllerIsSponsoredDisabledFingerprint.method.addInstructions(0, """
-            const/4 v0, 0x1
-            return v0
-        """)
+        val currentControllerMethod =
+            TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
+                ?: TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint.methodOrNull
+        (currentControllerMethod ?: messagesControllerIsSponsoredDisabledFingerprint.methodOrNull)
+            ?.addInstructions(0, """
+                const/4 v0, 0x1
+                return v0
+            """)
 
-        // The current cache helper was found in all three audited APKs; fail fast if its
-        // exact descriptor drifts instead of silently leaving this sponsored-message path live.
-        requireNotNull(messagesControllerGetSponsoredMessagesFingerprint.methodOrNull) {
-            "Missing MessagesController.getSponsoredMessages(J)SponsoredMessagesInfo"
-        }.addInstructions(0, """
+        // Some current R8 builds inline the sponsored-message cache path into the
+        // controller; retain the named cache hook only when the exact local method exists.
+        messagesControllerGetSponsoredMessagesFingerprint.methodOrNull?.addInstructions(0, """
             const/4 v0, 0x0
             return-object v0
         """)
 
-        videoAdsLoadFingerprint.method.addInstructions(0, "return-void")
+        videoAdsLoadFingerprint.methodOrNull?.addInstructions(0, "return-void")
 
         // Plus Messenger 13.1.1.0 declares loadAds(Activity, Cells.m3)V.
         // Keep the historical no-argument signature as a separate fallback for older Plus builds.

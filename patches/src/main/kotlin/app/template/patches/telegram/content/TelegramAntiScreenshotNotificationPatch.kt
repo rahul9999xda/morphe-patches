@@ -8,6 +8,8 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.SendScreenshotMessageSecretFingerprint
 import app.template.patches.telegram.SendScreenshotMessageUserFingerprint
+import app.template.patches.telegram.TelegramR8SendScreenshotNotificationNormalFingerprint
+import app.template.patches.telegram.TelegramR8SendScreenshotNotificationWebFingerprint
 
 @Suppress("unused")
 val telegramAntiScreenshotNotificationPatch = bytecodePatch(
@@ -19,10 +21,23 @@ val telegramAntiScreenshotNotificationPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        // Suppress screenshot notification in regular chats
-        SendScreenshotMessageUserFingerprint.method.addInstructions(0, "return-void")
+        // Telegram/Web 13.2.1 merged the user screenshot-notification helper into
+        // the boolean dispatcher that constructs TL_messages_sendScreenshotNotification.
+        // It must return false (not return-void) to preserve its current descriptor.
+        val currentDispatcher =
+            TelegramR8SendScreenshotNotificationNormalFingerprint.methodOrNull
+                ?: TelegramR8SendScreenshotNotificationWebFingerprint.methodOrNull
+        currentDispatcher?.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
 
-        // Suppress screenshot notification in secret chats
-        SendScreenshotMessageSecretFingerprint.method.addInstructions(0, "return-void")
+        // Plus and legacy builds retain the named void methods.
+        SendScreenshotMessageUserFingerprint.methodOrNull?.addInstructions(0, "return-void")
+        SendScreenshotMessageSecretFingerprint.methodOrNull?.addInstructions(0, "return-void")
+
+        require(currentDispatcher != null || SendScreenshotMessageUserFingerprint.methodOrNull != null) {
+            "No audited screenshot-notification dispatcher matched this APK"
+        }
     }
 }

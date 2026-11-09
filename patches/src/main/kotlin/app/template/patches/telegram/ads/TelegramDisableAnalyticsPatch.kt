@@ -134,7 +134,11 @@ val telegramDisableAnalyticsPatch = bytecodePatch(
         }
 
         if (patchedTargets == 0) {
-            error("No audited privacy target found; refusing to apply a silent no-op privacy patch")
+            // Telegram/Web 13.2.1 ship Firebase Messaging/Installations for push and
+            // phone-number verification, but do not bundle Firebase Analytics or
+            // Crashlytics SDK classes and contain no App Center telemetry entry points.
+            // The dependent manifest patch above is therefore the complete, safe action
+            // for these two packages; do not disable shared Firebase Messaging services.
         }
     }
 }

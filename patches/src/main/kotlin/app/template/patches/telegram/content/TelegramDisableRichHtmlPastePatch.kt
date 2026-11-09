@@ -9,6 +9,9 @@ import app.template.patches.telegram.ChatActivityEnterViewHandleRichHtmlPasteFin
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPastePlusFingerprint
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteCurrentFingerprint
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteWebFingerprint
+import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
 
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
@@ -27,11 +30,15 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
         // original method uses for its non-rich-HTML fallback. All other menu
         // actions continue through the original method unchanged.
         val currentTargets = listOf(
-            // Current Telegram/Web and the matching historical Web descriptor share `of`;
-            // both invoke Components/mg for the normal paste fallback.
+            // Telegram 13.2.1: yf extends ht; Telegram Web 13.2.1: ag extends ft.
+            // These methods are the actual EditText-backed composer controls.
+            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/ht;",
+            TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
+            // Plus Messenger 13.1.1.1: current composer inner class r2 extends xh0.
+            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/xh0;",
+            // Historical named targets retained independently.
             ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to
                 "Lorg/telegram/ui/Components/mg;",
-            // Plus current/legacy versions share qh0(I)Z; preserve its explicit EditText fallback.
             ChatActivityEnterViewRichHtmlPastePlusFingerprint to
                 "Landroid/widget/EditText;",
             // Telegram 13.0.3 uses a different owner and superclass.

@@ -7,6 +7,8 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.TelegramR8SendTypingNormalFingerprint
+import app.template.patches.telegram.TelegramR8SendTypingWebFingerprint
 
 /**
  * Telegram/Web 13.1.1 and Plus Messenger 13.1.1.0 no longer expose
@@ -45,18 +47,28 @@ val telegramHideTypingPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        requireNotNull(sendTypingLegacyFingerprint.methodOrNull) {
-            "Missing MessagesController.sendTyping(JJII)Z"
-        }.addInstructions(0, """
-            const/4 v0, 0x0
-            return v0
-        """)
-
-        requireNotNull(sendTypingActionFingerprint.methodOrNull) {
-            "Missing MessagesController.sendTyping(JJILjava/lang/String;I)Z"
-        }.addInstructions(0, """
-            const/4 v0, 0x0
-            return v0
-        """)
+        val currentR8Method =
+            TelegramR8SendTypingNormalFingerprint.methodOrNull
+                ?: TelegramR8SendTypingWebFingerprint.methodOrNull
+        if (currentR8Method != null) {
+            // 13.2.1 combines the former sendTyping overloads into D4(IIJJString)Z.
+            currentR8Method.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
+        } else {
+            requireNotNull(sendTypingLegacyFingerprint.methodOrNull) {
+                "Missing MessagesController.sendTyping(JJII)Z"
+            }.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
+            requireNotNull(sendTypingActionFingerprint.methodOrNull) {
+                "Missing MessagesController.sendTyping(JJILjava/lang/String;I)Z"
+            }.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
+        }
     }
 }

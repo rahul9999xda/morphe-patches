@@ -11,27 +11,33 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
 import org.w3c.dom.Element
 
-// Verified against the supplied Telegram 13.1.1 build 72371 APK.
-private val telegramSettingsRowsFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/p91;",
-    name = "b0",
-    returnType = "V",
+// Current 13.2.1 row builders, independently resolved for Android and Web.
+private val telegramSettingsRowsCurrentFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/c51;", name = "e0", returnType = "V",
+    parameters = listOf("Lorg/telegram/ui/c51;", "Ljava/util/ArrayList;"),
+)
+private val telegramWebSettingsRowsCurrentFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/h51;", name = "f0", returnType = "V",
+    parameters = listOf("Lorg/telegram/ui/h51;", "Ljava/util/ArrayList;"),
+)
+// Preserve historical fingerprints as an independent fallback.
+private val telegramSettingsRowsLegacyFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/p91;", name = "b0", returnType = "V",
     parameters = listOf("Lorg/telegram/ui/p91;", "Ljava/util/ArrayList;"),
 )
-
-// Verified against the supplied Telegram Web 13.1.1 build 72379 APK.
-private val telegramWebSettingsRowsFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/t91;",
-    name = "b0",
-    returnType = "V",
+private val telegramWebSettingsRowsLegacyFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/t91;", name = "b0", returnType = "V",
     parameters = listOf("Lorg/telegram/ui/t91;", "Ljava/util/ArrayList;"),
 )
-
 private val postInitApplicationFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/ApplicationLoader;",
-    name = "postInitApplication",
-    returnType = "V",
-    parameters = emptyList(),
+    definingClass = "Lorg/telegram/messenger/ApplicationLoader;", name = "postInitApplication",
+    returnType = "V", parameters = emptyList(),
+)
+private val telegramApplicationOnCreateFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/u0;", name = "onCreate", returnType = "V", parameters = emptyList(),
+)
+private val telegramWebApplicationOnCreateFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/t0;", name = "onCreate", returnType = "V", parameters = emptyList(),
 )
 
 private val morpheSettingsActivityManifestPatch = resourcePatch(
@@ -66,17 +72,17 @@ private val morpheSettingsActivityManifestPatch = resourcePatch(
     }
 }
 
-private fun settingsRowInstructions(componentClass: String): String = """
-    sget-object v4, Lorg/telegram/messenger/ApplicationLoader;->applicationContext:Landroid/content/Context;
+private fun settingsRowInstructions(componentClass: String, factoryMethod: String, contextField: String): String = """
+    sget-object v4, $contextField:Landroid/content/Context;
     invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
     move-result-object v0
-    invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->l(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
+    invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
     invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
 /**
- * Add the row on every normal method exit. The audited 13.1.1 methods each contain
+ * Add the row on every method exit. The audited current row builders each contain
  * two RETURN_VOID sites: one early exit and one normal completion. Insert in reverse
  * index order so earlier instruction indices remain stable.
  */
@@ -99,6 +105,9 @@ fun patchSettingsBuilder(
     targetClass: String,
     targetMethod: String,
     componentClass: String,
+    factoryMethod: String,
+    contextField: String,
+    minRegisters: Int,
 ) {
     classDefForEach { classDef ->
         if (classDef.type != targetClass) return@classDefForEach
@@ -118,10 +127,10 @@ fun patchSettingsBuilder(
         require(returnIndexes.size == 2) {
             "Unexpected $targetClass->$targetMethod control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
         }
-        require(mutableMethod.implementation!!.registerCount >= 22) {
-            "Unexpected $targetClass->$targetMethod register layout: expected at least 22 registers, found ${mutableMethod.implementation!!.registerCount}"
+        require(mutableMethod.implementation!!.registerCount >= minRegisters) {
+            "Unexpected $targetClass->$targetMethod register layout: expected at least $minRegisters registers, found ${mutableMethod.implementation!!.registerCount}"
         }
-        val instructions = settingsRowInstructions(componentClass)
+        val instructions = settingsRowInstructions(componentClass, factoryMethod, contextField)
         returnIndexes.asReversed().forEach { index ->
             mutableMethod.addInstructions(index, instructions)
         }
@@ -129,36 +138,55 @@ fun patchSettingsBuilder(
 }
 
 
-        val telegramMethod = telegramSettingsRowsFingerprint.methodOrNull
-        val webMethod = telegramWebSettingsRowsFingerprint.methodOrNull
+        val currentAndroid = telegramSettingsRowsCurrentFingerprint.methodOrNull
+        val currentWeb = telegramWebSettingsRowsCurrentFingerprint.methodOrNull
+        val legacyAndroid = telegramSettingsRowsLegacyFingerprint.methodOrNull
+        val legacyWeb = telegramWebSettingsRowsLegacyFingerprint.methodOrNull
 
         when {
-            telegramMethod != null && webMethod == null ->
-                patchSettingsBuilder("Lorg/telegram/ui/p91;", "b0", "r71")
-            webMethod != null && telegramMethod == null ->
-                patchSettingsBuilder("Lorg/telegram/ui/t91;", "b0", "g71")
-            telegramMethod == null && webMethod == null -> error(
-                "Could not resolve Telegram 13.1.1 Settings builder (p91/t91). Check APK version and fingerprints."
+            currentAndroid != null && currentWeb == null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/c51;", "e0", "t41", "m", "Lorg/telegram/messenger/u0;->b", 26,
             )
-            else -> error(
-                "Ambiguous Morphe Settings target: both Telegram Android and Telegram Web settings builders matched."
+            currentWeb != null && currentAndroid == null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/h51;", "f0", "m41", "m", "Lorg/telegram/messenger/t0;->b", 24,
             )
+            currentAndroid == null && currentWeb == null && legacyAndroid != null && legacyWeb == null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/p91;", "b0", "r71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
+            )
+            currentAndroid == null && currentWeb == null && legacyWeb != null && legacyAndroid == null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/t91;", "b0", "g71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
+            )
+            else -> error("Could not uniquely resolve the Telegram Android or Telegram Web Morphe Settings row builder")
         }
 
-        requireNotNull(postInitApplicationFingerprint.methodOrNull) {
-            "Missing ApplicationLoader.postInitApplication()V"
+        when {
+            currentAndroid != null -> requireNotNull(telegramApplicationOnCreateFingerprint.methodOrNull) {
+                "Missing Telegram Android Application.onCreate()V"
+            }
+            currentWeb != null -> requireNotNull(telegramWebApplicationOnCreateFingerprint.methodOrNull) {
+                "Missing Telegram Web Application.onCreate()V"
+            }
+            else -> requireNotNull(postInitApplicationFingerprint.methodOrNull) {
+                "Missing legacy ApplicationLoader.postInitApplication()V"
+            }
         }
+        val startupClass = when {
+            currentAndroid != null -> "Lorg/telegram/messenger/u0;"
+            currentWeb != null -> "Lorg/telegram/messenger/t0;"
+            else -> "Lorg/telegram/messenger/ApplicationLoader;"
+        }
+        val startupName = if (currentAndroid != null || currentWeb != null) "onCreate" else "postInitApplication"
         classDefForEach { classDef ->
-            if (classDef.type != "Lorg/telegram/messenger/ApplicationLoader;") return@classDefForEach
+            if (classDef.type != startupClass) return@classDefForEach
             val startupMethod = mutableClassDefBy(classDef).methods.firstOrNull {
-                it.name == "postInitApplication" && it.parameterTypes.isEmpty() && it.returnType == "V"
-            } ?: error("Could not resolve editable ApplicationLoader.postInitApplication()V")
+                it.name == startupName && it.parameterTypes.isEmpty() && it.returnType == "V"
+            } ?: error("Could not resolve editable startup method $startupClass->$startupName()V")
             val startupInstructions = requireNotNull(startupMethod.instructionsOrNull) {
-                "ApplicationLoader.postInitApplication()V has no implementation"
+                "Startup method $startupClass->$startupName()V has no implementation"
             }
             val startupReturns = startupInstructions.count { it.opcode == Opcode.RETURN_VOID }
             require(startupReturns == 1) {
-                "Unexpected ApplicationLoader.postInitApplication()V control flow: expected 1 RETURN_VOID site, found $startupReturns"
+                "Unexpected startup control flow: expected 1 RETURN_VOID site, found $startupReturns"
             }
             startupMethod.addInstructions(
                 startupInstructions.size - 1,
