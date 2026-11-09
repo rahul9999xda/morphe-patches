@@ -78,7 +78,10 @@ private fun settingsRowInstructions(componentClass: String, factoryMethod: Strin
     move-result-object v0
     invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
-    invoke-virtual {p1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+    # v1 is the low-register alias of the ArrayList parameter (p1), copied
+    # at the beginning of this static builder. Use v1 because p1 maps to v23
+    # in this 24-register method and cannot be encoded in invoke-virtual's 35c form.
+    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
 /**
