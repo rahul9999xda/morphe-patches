@@ -78,7 +78,7 @@ private fun settingsRowInstructions(componentClass: String, factoryMethod: Strin
     move-result-object v0
     invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
-    invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+    invoke-virtual {p1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
 /**
