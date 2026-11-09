@@ -11,6 +11,8 @@ import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteCurrentFi
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteWebFingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalBaseFingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteWebBaseFingerprint
 import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
 
 @Suppress("unused")
@@ -25,31 +27,53 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     )
 
     execute {
-        // Current Telegram/Web 13.1.1 and Plus 13.1.1.0: only intercept the Android Paste menu item
-        // (0x01020022), then delegate directly to the same superclass that the
-        // original method uses for its non-rich-HTML fallback. All other menu
-        // actions continue through the original method unchanged.
-        val currentTargets = listOf(
-            // Telegram 13.2.1: yf extends ht; Telegram Web 13.2.1: ag extends ft.
-            // These methods are the actual EditText-backed composer controls.
-            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/ht;",
-            TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
-            // Plus Messenger 13.1.1.1: current composer inner class r2 extends xh0.
-            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/xh0;",
-            // Historical named targets retained independently.
-            ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to
-                "Lorg/telegram/ui/Components/mg;",
-            ChatActivityEnterViewRichHtmlPastePlusFingerprint to
-                "Landroid/widget/EditText;",
-            // Telegram 13.0.3 uses a different owner and superclass.
-            ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to
-                "Lorg/telegram/ui/Components/lg;",
+        // The custom Rich HTML clipboard parser is implemented by the base editor
+        // classes (`ht` for Android, `ft` for Web), not by the thin composer wrappers
+        // (`yf`/`ag`). Calling the wrapper's immediate superclass re-enters that parser.
+        // Patch the actual parser owner and delegate to EditTextBoldCursor's inherited
+        // normal text paste implementation instead.
+        val baseTargets = listOf(
+            TelegramR8RichHtmlPasteNormalBaseFingerprint to "Lorg/telegram/ui/Components/EditTextBoldCursor;",
+            TelegramR8RichHtmlPasteWebBaseFingerprint to "Lorg/telegram/ui/Components/EditTextBoldCursor;",
         )
-        val currentTarget = currentTargets.firstNotNullOfOrNull { (fingerprint, superClass) ->
+        val matchedBaseTargets = baseTargets.mapNotNull { (fingerprint, superClass) ->
             fingerprint.methodOrNull?.let { it to superClass }
         }
+        require(matchedBaseTargets.size <= 1) {
+            "Ambiguous Rich HTML base editor target: ${matchedBaseTargets.size} current base handlers matched"
+        }
+        val baseTarget = matchedBaseTargets.singleOrNull()
 
-        if (currentTarget != null) {
+        val currentTargets = listOf(
+            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/ht;",
+            TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
+            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/xh0;",
+            ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to "Lorg/telegram/ui/Components/mg;",
+            ChatActivityEnterViewRichHtmlPastePlusFingerprint to "Landroid/widget/EditText;",
+            ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to "Lorg/telegram/ui/Components/lg;",
+        )
+        val matchedCurrentTargets = currentTargets.mapNotNull { (fingerprint, superClass) ->
+            fingerprint.methodOrNull?.let { it to superClass }
+        }
+        require(matchedCurrentTargets.size <= 1) {
+            "Ambiguous Rich HTML wrapper target: ${matchedCurrentTargets.size} current handlers matched"
+        }
+        val currentTarget = matchedCurrentTargets.singleOrNull()
+
+        if (baseTarget != null) {
+            val (method, superClass) = baseTarget
+            method.addInstructions(
+                0,
+                """
+                    const v0, 0x1020022
+                    if-ne p1, v0, :morphe_rich_html_paste_continue
+                    invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
+                    move-result v0
+                    return v0
+                    :morphe_rich_html_paste_continue
+                """,
+            )
+        } else if (currentTarget != null) {
             val (method, superClass) = currentTarget
             method.addInstructions(
                 0,
@@ -57,8 +81,8 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                     const v0, 0x1020022
                     if-ne p1, v0, :morphe_rich_html_paste_continue
                     invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
-                    move-result p1
-                    return p1
+                    move-result v0
+                    return v0
                     :morphe_rich_html_paste_continue
                 """,
             )
