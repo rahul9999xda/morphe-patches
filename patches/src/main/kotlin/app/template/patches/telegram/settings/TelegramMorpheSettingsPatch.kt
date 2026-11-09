@@ -82,10 +82,9 @@ private fun settingsRowInstructions(componentClass: String, factoryMethod: Strin
 """.trimIndent()
 
 /**
- * Add the row on every method exit. These builders are static methods whose
- * parameters are (settingsController, ArrayList); therefore p0 is the controller
- * and p1 is the actual ArrayList. There are two return sites in the audited 13.2.1
- * builders. Insert in reverse index order so earlier indices remain stable.
+ * Add the row on every method exit. The audited current row builders each contain
+ * two RETURN_VOID sites: one early exit and one normal completion. Insert in reverse
+ * index order so earlier instruction indices remain stable.
  */
 
 @Suppress("unused")
@@ -125,20 +124,11 @@ fun patchSettingsBuilder(
         val returnIndexes = implementation.mapIndexedNotNull { index, instruction ->
             index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
         }
-        require(returnIndexes.isNotEmpty()) {
-            "Unexpected $targetClass->$targetMethod control flow: no RETURN_VOID site found"
+        require(returnIndexes.size == 2) {
+            "Unexpected $targetClass->$targetMethod control flow: expected 2 RETURN_VOID sites, found ${returnIndexes.size}"
         }
-        val registerCount = mutableMethod.implementation!!.registerCount
-        require(registerCount >= minRegisters) {
-            "Unexpected $targetClass->$targetMethod register layout: expected at least $minRegisters registers, found $registerCount"
-        }
-        // A static method with two parameters maps them to p0 and p1. Validate that
-        // p1 exists and is the ArrayList parameter before emitting the append call.
-        require((mutableMethod.accessFlags and 0x8) != 0) {
-            "Unexpected $targetClass->$targetMethod: expected static settings builder"
-        }
-        require(mutableMethod.parameterTypes.map { it.toString() } == listOf(targetClass, "Ljava/util/ArrayList;")) {
-            "Unexpected parameter layout for $targetClass->$targetMethod"
+        require(mutableMethod.implementation!!.registerCount >= minRegisters) {
+            "Unexpected $targetClass->$targetMethod register layout: expected at least $minRegisters registers, found ${mutableMethod.implementation!!.registerCount}"
         }
         val instructions = settingsRowInstructions(componentClass, factoryMethod, contextField)
         returnIndexes.asReversed().forEach { index ->

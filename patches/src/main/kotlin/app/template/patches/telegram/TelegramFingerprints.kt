@@ -1485,17 +1485,7 @@ val TelegramR8RichHtmlPasteNormalFingerprint = Fingerprint(
     returnType = "Z", parameters = listOf("I"),
 )
 val TelegramR8RichHtmlPasteWebFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/ag;", name = "onTextContextMenuItem",
-    returnType = "Z", parameters = listOf("I"),
-)
-// The Rich HTML clipboard implementation is in the Web base editor `ft`, not its
-// wrapper subclass `ag`. Patching `ag` and invoking `ft` re-enters the custom handler.
-val TelegramR8RichHtmlPasteNormalBaseFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/ht;", name = "onTextContextMenuItem",
-    returnType = "Z", parameters = listOf("I"),
-)
-val TelegramR8RichHtmlPasteWebBaseFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/ft;", name = "onTextContextMenuItem",
+    definingClass = "Lorg/telegram/ui/Components/bf;", name = "onTextContextMenuItem",
     returnType = "Z", parameters = listOf("I"),
 )
 val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
