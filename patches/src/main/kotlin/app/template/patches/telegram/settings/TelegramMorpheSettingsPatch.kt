@@ -78,7 +78,7 @@ private fun settingsRowInstructions(componentClass: String, factoryMethod: Strin
     move-result-object v0
     invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
-    invoke-virtual {p1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
+    invoke-virtual {p2, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
 /**
@@ -184,9 +184,11 @@ fun patchSettingsBuilder(
             val startupInstructions = requireNotNull(startupMethod.instructionsOrNull) {
                 "Startup method $startupClass->$startupName()V has no implementation"
             }
-            val startupReturns = startupInstructions.count { it.opcode == Opcode.RETURN_VOID }
-            require(startupReturns == 1) {
-                "Unexpected startup control flow: expected 1 RETURN_VOID site, found $startupReturns"
+            val startupReturnIndexes = startupInstructions.mapIndexedNotNull { index, instruction ->
+                index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
+            }
+            require(startupReturnIndexes.size == 1) {
+                "Unexpected startup control flow: expected 1 RETURN_VOID site, found ${startupReturnIndexes.size}"
             }
             val runtimeInstallInstructions = when {
                 currentAndroid != null -> """
@@ -199,7 +201,9 @@ fun patchSettingsBuilder(
                 """.trimIndent()
                 else -> "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V"
             }
-            startupMethod.addInstructions(startupInstructions.size - 1, runtimeInstallInstructions)
+            // Insert immediately before the actual normal return, never before the
+            // final instruction blindly: obfuscated methods can end in a throw path.
+            startupMethod.addInstructions(startupReturnIndexes.single(), runtimeInstallInstructions)
         }
     }
 }
