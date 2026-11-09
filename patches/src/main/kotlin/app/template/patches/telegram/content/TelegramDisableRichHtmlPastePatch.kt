@@ -52,14 +52,18 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
+        // `instructionMatches` contains instruction/index records, not method-bearing
+        // fingerprint matches. Resolve the containing method once, then edit by index.
+        val targetMethod = richHtmlBlockquoteFingerprint.methodOrNull
+            ?: error("Rich HTML entity normalisation target not found: MessageObject.addEntitiesToText()")
         val matches = richHtmlBlockquoteFingerprint.instructionMatches
         require(matches.isNotEmpty()) {
-            "Rich HTML entity normalisation target not found: MessageObject.addEntitiesToText()"
+            "Collapsed blockquote field access not found in MessageObject.addEntitiesToText()"
         }
-        matches.forEach { match ->
+        matches.distinctBy { it.index }.sortedByDescending { it.index }.forEach { match ->
             val instruction = match.instruction as? TwoRegisterInstruction
-                ?: error("Unexpected collapsed-field instruction in addEntitiesToText()")
-            match.method.replaceInstruction(
+                ?: error("Unexpected collapsed-field instruction at index ${match.index} in addEntitiesToText()")
+            targetMethod.replaceInstruction(
                 match.index,
                 "const/4 v${instruction.registerA}, 0x0",
             )

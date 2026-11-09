@@ -245,13 +245,18 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private List<ChatChoice> readTelegramDialogs() throws Exception {
-        ClassLoader cl = getClassLoader();
-        Class<?> userConfig = Class.forName("org.telegram.messenger.UserConfig", false, cl);
+        Class<?> userConfig = loadTelegramClass("org.telegram.messenger.UserConfig");
         int account = 0;
-        try { account = userConfig.getField("selectedAccount").getInt(null); } catch (Throwable ignored) { }
+        try {
+            java.lang.reflect.Field selected = findField(userConfig, "selectedAccount");
+            if (selected != null) { selected.setAccessible(true); account = selected.getInt(null); }
+        } catch (Throwable ignored) { }
 
-        Class<?> controllerClass = Class.forName("org.telegram.messenger.MessagesController", false, cl);
-        Object controller = controllerClass.getMethod("getInstance", int.class).invoke(null, account);
+        Class<?> controllerClass = loadTelegramClass("org.telegram.messenger.MessagesController");
+        java.lang.reflect.Method getInstance = findStaticIntMethod(controllerClass, "getInstance");
+        if (getInstance == null) throw new NoSuchMethodException("MessagesController.getInstance(int)");
+        getInstance.setAccessible(true);
+        Object controller = getInstance.invoke(null, account);
         if (controller == null) throw new IllegalStateException("Telegram MessagesController is unavailable");
 
         // Do not assume a public field named "dialogs": Telegram forks move/rename this collection.
@@ -271,6 +276,36 @@ public final class MorpheSettingsActivity extends Activity {
         ArrayList<ChatChoice> result = new ArrayList<>(found.values());
         java.util.Collections.sort(result, (a, b) -> a.title.compareToIgnoreCase(b.title));
         return result;
+    }
+
+
+    /** Resolve Telegram classes through the host app's loaders before the extension loader. */
+    private Class<?> loadTelegramClass(String name) throws ClassNotFoundException {
+        ClassLoader[] loaders = new ClassLoader[] {
+                Thread.currentThread().getContextClassLoader(),
+                getApplicationContext().getClassLoader(),
+                getClassLoader(),
+                ClassLoader.getSystemClassLoader()
+        };
+        ClassNotFoundException last = null;
+        for (ClassLoader loader : loaders) {
+            if (loader == null) continue;
+            try { return Class.forName(name, false, loader); }
+            catch (ClassNotFoundException e) { last = e; }
+        }
+        if (last != null) throw last;
+        throw new ClassNotFoundException(name);
+    }
+
+    private java.lang.reflect.Method findStaticIntMethod(Class<?> type, String name) {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            for (java.lang.reflect.Method method : c.getDeclaredMethods()) {
+                Class<?>[] p = method.getParameterTypes();
+                if (method.getName().equals(name) && p.length == 1 && p[0] == int.class
+                        && java.lang.reflect.Modifier.isStatic(method.getModifiers())) return method;
+            }
+        }
+        return null;
     }
 
     /** Handles Telegram's ArrayList/Map and Android SparseArray/LongSparseArray containers. */
@@ -326,8 +361,7 @@ public final class MorpheSettingsActivity extends Activity {
         try {
             // Telegram's concrete TL object is commonly TLRPC$TL_dialog, not TLRPC$Dialog.
             // Test assignability against the base type instead of a case-sensitive class-name substring.
-            ClassLoader cl = getClassLoader();
-            Class<?> dialogBase = Class.forName("org.telegram.tgnet.TLRPC$Dialog", false, cl);
+            Class<?> dialogBase = loadTelegramClass("org.telegram.tgnet.TLRPC$Dialog");
             if (!dialogBase.isAssignableFrom(dialog.getClass())) return;
             java.lang.reflect.Field idField = findField(dialog.getClass(), "id");
             if (idField == null) return;
