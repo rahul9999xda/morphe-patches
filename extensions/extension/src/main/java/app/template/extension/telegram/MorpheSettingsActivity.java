@@ -180,7 +180,7 @@ public final class MorpheSettingsActivity extends Activity {
         content.addView(rulesContainer, rulesParams);
 
         TextView note = new TextView(this);
-        note.setText("Choose source and destination chats from Telegram dialogs, or enter dialog IDs manually. Secret chats and protected/no-forward messages are excluded.");
+        note.setText("Choose source and destination chats from Telegram dialogs, or enter dialog IDs manually. Secret chats and service messages are excluded. Forward mode respects Telegram forwarding restrictions; Copy mode supports text and formatted text.");
         note.setTextSize(12);
         note.setTextColor(secondary);
         LinearLayout.LayoutParams noteParams = params(-1, -2);
@@ -245,19 +245,34 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private List<ChatChoice> readTelegramDialogs() throws Exception {
-        Class<?> userConfig = loadTelegramClass("org.telegram.messenger.UserConfig");
-        int account = 0;
+        ClassLoader cl = getClassLoader();
+        int account = selectedAccount(cl);
+        Class<?> controllerClass;
+        Object controller;
         try {
-            java.lang.reflect.Field selected = findField(userConfig, "selectedAccount");
-            if (selected != null) { selected.setAccessible(true); account = selected.getInt(null); }
-        } catch (Throwable ignored) { }
-
-        Class<?> controllerClass = loadTelegramClass("org.telegram.messenger.MessagesController");
-        java.lang.reflect.Method getInstance = findStaticIntMethod(controllerClass, "getInstance");
-        if (getInstance == null) throw new NoSuchMethodException("MessagesController.getInstance(int)");
-        getInstance.setAccessible(true);
-        Object controller = getInstance.invoke(null, account);
-        if (controller == null) throw new IllegalStateException("Telegram MessagesController is unavailable");
+            // Legacy Telegram/Plus class names remain a separate compatibility path.
+            controllerClass = Class.forName("org.telegram.messenger.MessagesController", false, cl);
+            controller = controllerClass.getMethod("getInstance", int.class).invoke(null, account);
+        } catch (ClassNotFoundException currentR8Build) {
+            // Telegram and Telegram Web 13.2.1 R8 mappings were checked against both clean APKs:
+            // MessagesController is vp (Android) / rp (Web), with s1(int) as getInstance.
+            String[] candidates = {"org.telegram.messenger.vp", "org.telegram.messenger.rp"};
+            controllerClass = null;
+            controller = null;
+            for (String candidate : candidates) {
+                try {
+                    Class<?> type = Class.forName(candidate, false, cl);
+                    // Validate the actual MessagesController shape rather than accepting an
+                    // unrelated R8 class that happens to expose an s1(int) factory.
+                    type.getDeclaredMethod("a2", java.lang.Long.class);
+                    type.getDeclaredMethod("v1", long.class);
+                    Object instance = type.getMethod("s1", int.class).invoke(null, account);
+                    if (instance != null) { controllerClass = type; controller = instance; break; }
+                } catch (Throwable ignored) { }
+            }
+        }
+        if (controllerClass == null || controller == null)
+            throw new IllegalStateException("Telegram MessagesController is unavailable");
 
         // Do not assume a public field named "dialogs": Telegram forks move/rename this collection.
         java.util.LinkedHashMap<Long, ChatChoice> found = new java.util.LinkedHashMap<>();
@@ -276,36 +291,6 @@ public final class MorpheSettingsActivity extends Activity {
         ArrayList<ChatChoice> result = new ArrayList<>(found.values());
         java.util.Collections.sort(result, (a, b) -> a.title.compareToIgnoreCase(b.title));
         return result;
-    }
-
-
-    /** Resolve Telegram classes through the host app's loaders before the extension loader. */
-    private Class<?> loadTelegramClass(String name) throws ClassNotFoundException {
-        ClassLoader[] loaders = new ClassLoader[] {
-                Thread.currentThread().getContextClassLoader(),
-                getApplicationContext().getClassLoader(),
-                getClassLoader(),
-                ClassLoader.getSystemClassLoader()
-        };
-        ClassNotFoundException last = null;
-        for (ClassLoader loader : loaders) {
-            if (loader == null) continue;
-            try { return Class.forName(name, false, loader); }
-            catch (ClassNotFoundException e) { last = e; }
-        }
-        if (last != null) throw last;
-        throw new ClassNotFoundException(name);
-    }
-
-    private java.lang.reflect.Method findStaticIntMethod(Class<?> type, String name) {
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            for (java.lang.reflect.Method method : c.getDeclaredMethods()) {
-                Class<?>[] p = method.getParameterTypes();
-                if (method.getName().equals(name) && p.length == 1 && p[0] == int.class
-                        && java.lang.reflect.Modifier.isStatic(method.getModifiers())) return method;
-            }
-        }
-        return null;
     }
 
     /** Handles Telegram's ArrayList/Map and Android SparseArray/LongSparseArray containers. */
@@ -361,7 +346,8 @@ public final class MorpheSettingsActivity extends Activity {
         try {
             // Telegram's concrete TL object is commonly TLRPC$TL_dialog, not TLRPC$Dialog.
             // Test assignability against the base type instead of a case-sensitive class-name substring.
-            Class<?> dialogBase = loadTelegramClass("org.telegram.tgnet.TLRPC$Dialog");
+            ClassLoader cl = getClassLoader();
+            Class<?> dialogBase = Class.forName("org.telegram.tgnet.TLRPC$Dialog", false, cl);
             if (!dialogBase.isAssignableFrom(dialog.getClass())) return;
             java.lang.reflect.Field idField = findField(dialog.getClass(), "id");
             if (idField == null) return;
@@ -383,12 +369,25 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     /** Resolve dialog names using Telegram's native account controller. Handles int/long APIs and obfuscated forks. */
+    private int selectedAccount(ClassLoader cl) {
+        try {
+            Class<?> legacy = Class.forName("org.telegram.messenger.UserConfig", false, cl);
+            return legacy.getField("selectedAccount").getInt(null);
+        } catch (Throwable ignored) {
+            try {
+                // R8 UserConfig is c20 in both 13.2.1 APKs; t0 stores selectedAccount.
+                Class<?> current = Class.forName("org.telegram.messenger.c20", false, cl);
+                return current.getField("t0").getInt(null);
+            } catch (Throwable ignoredAgain) { return 0; }
+        }
+    }
+
     private ChatChoice resolveChatChoice(Class<?> mc, Object controller, long dialogId) {
         String title = null;
         String icon = dialogId > 0 ? "👤" : "👥";
         try {
             if (dialogId > 0) {
-                Object user = invokeNumericGetter(mc, controller, "getUser", dialogId);
+                Object user = invokeNumericGetter(mc, controller, new String[]{"getUser", "a2"}, dialogId);
                 if (user != null) {
                     String first = readStringField(user, "first_name");
                     String last = readStringField(user, "last_name");
@@ -398,7 +397,7 @@ public final class MorpheSettingsActivity extends Activity {
             } else {
                 long chatId = dialogId <= -1000000000000L
                         ? -dialogId - 1000000000000L : -dialogId;
-                Object chat = invokeNumericGetter(mc, controller, "getChat", chatId);
+                Object chat = invokeNumericGetter(mc, controller, new String[]{"getChat", "v1"}, chatId);
                 if (chat != null) {
                     title = readStringField(chat, "title");
                     // Telegram channel chats expose broadcast/megagroup flags in flags.
@@ -415,15 +414,19 @@ public final class MorpheSettingsActivity extends Activity {
         return new ChatChoice(dialogId, title.trim(), icon);
     }
 
-    private Object invokeNumericGetter(Class<?> owner, Object target, String name, long value) {
+    private Object invokeNumericGetter(Class<?> owner, Object target, String[] names, long value) {
         for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
             for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
                 Class<?>[] p = m.getParameterTypes();
-                if (!m.getName().equals(name) || p.length != 1) continue;
+                if (p.length != 1) continue;
+                boolean named = false;
+                for (String name : names) if (m.getName().equals(name)) { named = true; break; }
+                if (!named) continue;
                 try {
                     Object arg;
                     if (p[0] == int.class || p[0] == Integer.class) arg = (int) value;
                     else if (p[0] == long.class || p[0] == Long.class) arg = value;
+                    else if (p[0] == java.lang.Long.class) arg = Long.valueOf(value);
                     else continue;
                     m.setAccessible(true);
                     return m.invoke(target, arg);
@@ -545,8 +548,8 @@ public final class MorpheSettingsActivity extends Activity {
             secondRowParams.topMargin = dp(6);
             item.addView(secondRow, secondRowParams);
             reset.setOnClickListener(v -> new AlertDialog.Builder(this)
-                    .setTitle("Reset automation counter?")
-                    .setMessage("This resets Automation and the selected delivery counter for this rule to zero. It does not change the rule.")
+                    .setTitle("Reset rule counters?")
+                    .setMessage("This resets Automation, Forwarded and Copied counters for this rule to zero. It does not change the rule.")
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Reset", (dialog, which) -> {
                         store.resetStats(rule.getId());
@@ -609,11 +612,10 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private String ruleDetailsText(ForwardingRule rule) {
-        String deliveryCount = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY
-                ? " · Copied: " + store.getCount(rule.getId(), "copied")
-                : " · Forwarded: " + store.getCount(rule.getId(), "forwarded");
         return "Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
-                + "\nAutomation: " + store.getCount(rule.getId(), "automation") + deliveryCount;
+                + "\nAutomation: " + store.getCount(rule.getId(), "automation")
+                + " · Forwarded: " + store.getCount(rule.getId(), "forwarded")
+                + " · Copied: " + store.getCount(rule.getId(), "copied");
     }
 
     /** Refresh count labels only; do not rebuild cards/buttons while the user is interacting. */

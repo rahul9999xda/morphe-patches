@@ -1,71 +1,92 @@
 package app.template.patches.telegram.content
 
-import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
-import app.morphe.patcher.fieldAccess
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.instructionsOrNull
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
-import app.template.patches.telegram.signature.telegramSpoofDependency
-import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
-
-/**
- * Preserve Telegram's native Rich HTML clipboard parser. Copy mode separately
- * retains MessageObject.messageText as a styled CharSequence and passes it to
- * Telegram's native text-send helper, which converts spans to message entities.
- *
- * Only normalise the collapsed flag on parsed blockquote entities. Do not
- * intercept onTextContextMenuItem(ACTION_PASTE): doing so bypasses getHtmlText()
- * and can discard embedded URL/TextUrl spans.
- */
-private val richHtmlBlockquoteFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/MessageObject;",
-    name = "addEntitiesToText",
-    returnType = "Z",
-    parameters = listOf(
-        "Ljava/lang/CharSequence;",
-        "Ljava/util/ArrayList;",
-        "Z", "Z", "Z", "Z", "I",
-    ),
-    filters = listOf(
-        fieldAccess(
-            definingClass = "Lorg/telegram/tgnet/TLRPC\$MessageEntity;",
-            name = "collapsed",
-            type = "Z",
-            opcode = Opcode.IGET_BOOLEAN,
-        ),
-    ),
-)
+import app.template.patches.telegram.ChatActivityEnterViewHandleRichHtmlPasteFingerprint
+import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPastePlusFingerprint
+import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteCurrentFingerprint
+import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteWebFingerprint
+import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
 
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
-    name = "Fix Rich HTML copy and paste",
-    description = "Preserves Telegram's native Rich HTML clipboard and embedded links; normalises collapsible blockquote entities for safe sending.",
+    name = "Use normal paste for Rich HTML clipboard content",
+    description = "Bypasses Telegram's custom Rich HTML clipboard handling and delegates paste to the normal superclass implementation.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
-        TELEGRAM_PLUS_COMPATIBILITY,
         TELEGRAM_WEB_COMPATIBILITY,
+        TELEGRAM_PLUS_COMPATIBILITY,
     )
-    dependsOn(telegramSpoofDependency())
 
     execute {
-        // `instructionMatches` contains instruction/index records, not method-bearing
-        // fingerprint matches. Resolve the containing method once, then edit by index.
-        val targetMethod = richHtmlBlockquoteFingerprint.methodOrNull
-            ?: error("Rich HTML entity normalisation target not found: MessageObject.addEntitiesToText()")
-        val matches = richHtmlBlockquoteFingerprint.instructionMatches
-        require(matches.isNotEmpty()) {
-            "Collapsed blockquote field access not found in MessageObject.addEntitiesToText()"
+        // Current Telegram/Web 13.1.1 and Plus 13.1.1.0: only intercept the Android Paste menu item
+        // (0x01020022), then delegate directly to the same superclass that the
+        // original method uses for its non-rich-HTML fallback. All other menu
+        // actions continue through the original method unchanged.
+        val currentTargets = listOf(
+            // Telegram 13.2.1: yf extends ht; Telegram Web 13.2.1: ag extends ft.
+            // These methods are the actual EditText-backed composer controls.
+            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/ht;",
+            TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
+            // Plus Messenger 13.1.1.1: current composer inner class r2 extends xh0.
+            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/xh0;",
+            // Historical named targets retained independently.
+            ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to
+                "Lorg/telegram/ui/Components/mg;",
+            ChatActivityEnterViewRichHtmlPastePlusFingerprint to
+                "Landroid/widget/EditText;",
+            // Telegram 13.0.3 uses a different owner and superclass.
+            ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to
+                "Lorg/telegram/ui/Components/lg;",
+        )
+        val currentTarget = currentTargets.firstNotNullOfOrNull { (fingerprint, superClass) ->
+            fingerprint.methodOrNull?.let { it to superClass }
         }
-        matches.distinctBy { it.index }.sortedByDescending { it.index }.forEach { match ->
-            val instruction = match.instruction as? TwoRegisterInstruction
-                ?: error("Unexpected collapsed-field instruction at index ${match.index} in addEntitiesToText()")
-            targetMethod.replaceInstruction(
-                match.index,
-                "const/4 v${instruction.registerA}, 0x0",
+
+        if (currentTarget != null) {
+            val (matchedMethod, superClass) = currentTarget
+            var patched = false
+            classDefForEach { classDef ->
+                if (classDef.type != matchedMethod.definingClass) return@classDefForEach
+                val mutableMethod = mutableClassDefBy(classDef).methods.firstOrNull {
+                    it.name == matchedMethod.name &&
+                        it.parameterTypes.map { type -> type.toString() } == listOf("I") &&
+                        it.returnType == "Z"
+                } ?: error("Could not resolve editable Rich HTML paste handler ${matchedMethod.definingClass}->${matchedMethod.name}")
+                mutableMethod.addInstructions(
+                    0,
+                    """
+                        const v0, 0x1020022
+                        if-ne p1, v0, :morphe_rich_html_paste_continue
+                        invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
+                        move-result v0
+                        return v0
+                        :morphe_rich_html_paste_continue
+                    """,
+                )
+                patched = true
+            }
+            check(patched) { "Could not patch editable Rich HTML paste handler" }
+        } else {
+            // Legacy releases expose the original named helper. Returning false
+            // from that helper lets the caller proceed through its plain-text path.
+            val legacyMethod = ChatActivityEnterViewHandleRichHtmlPasteFingerprint.methodOrNull
+                ?: throw IllegalStateException(
+                    "Rich HTML paste target not found: no current Telegram/Web/Plus handler or legacy handleRichHtmlPaste()Z method matched."
+                )
+            legacyMethod.addInstructions(
+                0,
+                """
+                    const/4 v0, 0x0
+                    return v0
+                """,
             )
         }
     }

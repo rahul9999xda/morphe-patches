@@ -8,7 +8,6 @@ import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
-import app.template.patches.telegram.content.telegramDisableRichHtmlPastePatch
 import com.android.tools.smali.dexlib2.Opcode
 import org.w3c.dom.Element
 
@@ -96,7 +95,7 @@ val telegramMorpheSettingsPatch = bytecodePatch(
     description = "Adds Morphe Settings to Telegram Android and Telegram Web and initializes forwarding at startup.",
 ) {
     compatibleWith(TELEGRAM_COMPATIBILITY, TELEGRAM_WEB_COMPATIBILITY)
-    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch, telegramDisableRichHtmlPastePatch)
+    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch)
 
     execute {
 /**
