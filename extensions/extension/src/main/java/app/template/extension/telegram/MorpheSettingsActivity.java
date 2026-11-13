@@ -218,7 +218,7 @@ public final class MorpheSettingsActivity extends Activity {
 
         runtimeStatusView = label(store.getRuntimeStatus(), secondary);
         runtimeStatusView.setTextSize(12);
-        LinearLayout statusParams = params(-1, -2);
+        LinearLayout.LayoutParams statusParams = params(-1, -2);
         statusParams.topMargin = dp(8);
         content.addView(runtimeStatusView, statusParams);
 
