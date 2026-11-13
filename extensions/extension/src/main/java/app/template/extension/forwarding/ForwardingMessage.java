@@ -59,7 +59,12 @@ public final class ForwardingMessage {
     public boolean isSecretChat() { return secretChat; }
     public boolean isServiceMessage() { return serviceMessage; }
     public boolean isProtectedContent() { return protectedContent; }
-    public boolean canForward() { return forwardable && !protectedContent; }
+    /**
+     * Eligibility comes from Telegram's native MessageObject predicate. When the
+     * separate Bypass content restrictions patch is applied, that predicate ignores
+     * only the noforwards restriction while retaining other native eligibility checks.
+     */
+    public boolean canForward() { return forwardable; }
     public boolean isStickerOrEmojiOnly() { return stickerOrEmojiOnly; }
     /** Opaque original Telegram object; only a version adapter may interpret it. */
     public Object getNativeMessage() { return nativeMessage; }

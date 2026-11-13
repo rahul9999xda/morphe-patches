@@ -1573,6 +1573,13 @@ val TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/sp;", name = "E2", returnType = "Z", parameters = emptyList(),
 )
 
+// Telegram Android/Web 13.2.2 current-account Premium predicate. The DEX body
+// reads UserConfig.currentUser.premium; this is distinct from the controller's
+// per-user predicate below and is required for account-level Premium UI/features.
+val TelegramR8UserConfigIsPremiumFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/d20;", name = "q", returnType = "Z", parameters = emptyList(),
+)
+
 val TelegramR8MessagesControllerIsPremiumUserNormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/wp;", name = "B2", returnType = "Z",
     parameters = listOf("Lorg/telegram/tgnet/TLRPC\$User;"),

@@ -285,8 +285,12 @@ public final class MorpheForwardingRuntime {
             } catch (Throwable ignored) { /* fail closed for forward mode */ }
             boolean stickerOrEmojiOnly = (isStickerMessage(owner) && text.trim().isEmpty())
                     || (!text.trim().isEmpty() && isEmojiOnlyText(text) && !hasMedia(owner));
+            // The Bypass content restrictions patch changes Telegram's native noforwards
+            // predicates/field reads. Trust MessageObject.canForwardMessage() after that
+            // patch: it retains Telegram's other eligibility checks while allowing
+            // protected channel messages. Do not reapply the raw noforwards bit here.
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, protectedContent, canForward && !protectedContent,
+                    false, false, false, protectedContent, canForward,
                     messageObject, stickerOrEmojiOnly);
         } catch (Throwable error) {
             if (MESSAGE_ADAPTER_ERROR_REPORTED.compareAndSet(false, true)) {

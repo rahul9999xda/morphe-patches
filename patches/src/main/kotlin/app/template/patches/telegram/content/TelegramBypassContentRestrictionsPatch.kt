@@ -16,10 +16,7 @@ import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullNormalFin
 import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullWebFingerprint
 import app.template.patches.telegram.TelegramR8IsPeerNoForwardsNormalFingerprint
 import app.template.patches.telegram.TelegramR8IsPeerNoForwardsWebFingerprint
-import app.template.patches.telegram.TelegramR8CanForwardMessageNormalFingerprint
-import app.template.patches.telegram.TelegramR8CanForwardMessageWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8IsChatNoForwardsFingerprint
-import app.template.patches.telegram.TelegramPlusR8CanForwardMessageFingerprint
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
@@ -56,13 +53,6 @@ private val isPeerNoForwardsFingerprint = Fingerprint(
     name = "isPeerNoForwards",
     returnType = "Z",
     parameters = listOf("J"),
-)
-
-private val canForwardMessageFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/MessageObject;",
-    name = "canForwardMessage",
-    returnType = "Z",
-    parameters = emptyList(),
 )
 
 private val messageNoForwardsReadFingerprint = Fingerprint(
@@ -125,14 +115,11 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
             """)
         }
 
-        val currentCanForward =
-            TelegramR8CanForwardMessageNormalFingerprint.methodOrNull
-                ?: TelegramR8CanForwardMessageWebFingerprint.methodOrNull
-                ?: TelegramPlusR8CanForwardMessageFingerprint.methodOrNull
-        (currentCanForward ?: canForwardMessageFingerprint.methodOrNull)?.addInstructions(0, """
-            const/4 v0, 0x1
-            return v0
-        """)
+        // Do not force MessageObject.canForwardMessage() to true. Its body also
+        // rejects secret/view-once/service and other intrinsically non-forwardable
+        // message types. The exact noforwards field reads and controller predicates
+        // below are the narrow bypass; they make otherwise-forwardable channel
+        // messages eligible without disabling Telegram's unrelated safeguards.
 
         listOf(messageNoForwardsReadFingerprint, chatNoForwardsReadFingerprint).forEach { fingerprint ->
             val matches = fingerprint.matchAllOrNull().orEmpty()
