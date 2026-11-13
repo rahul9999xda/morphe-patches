@@ -22,7 +22,7 @@ import android.widget.Toast;
  * the bytecode injection can call this stable extension API.
  */
 public final class MorpheSettingsEntry {
-    private static final int MORPHE_BLUE = 0xff079fc5;
+    private static final int MORPHE_BLACK = 0xff171717;
 
     private MorpheSettingsEntry() { }
 
@@ -136,7 +136,7 @@ public final class MorpheSettingsEntry {
 
         MorpheMarkView(Context context) {
             super(context);
-            tile.setColor(MORPHE_BLUE);
+            tile.setColor(MORPHE_BLACK);
             tile.setCornerRadius(dp(context, 15));
             setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         }

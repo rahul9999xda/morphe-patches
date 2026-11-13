@@ -46,20 +46,26 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
             ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to
                 "Lorg/telegram/ui/Components/lg;",
         )
-        val currentTarget = currentTargets.firstNotNullOfOrNull { (fingerprint, superClass) ->
+        val matchedTargets = currentTargets.mapNotNull { (fingerprint, superClass) ->
             fingerprint.methodOrNull?.let { it to superClass }
         }
+        require(matchedTargets.size <= 1) {
+            "Ambiguous Rich HTML paste target: matched ${matchedTargets.size} current handlers; refusing to patch an arbitrary class"
+        }
+        val currentTarget = matchedTargets.singleOrNull()
 
         if (currentTarget != null) {
             val (matchedMethod, superClass) = currentTarget
             var patched = false
             classDefForEach { classDef ->
                 if (classDef.type != matchedMethod.definingClass) return@classDefForEach
-                val mutableMethod = mutableClassDefBy(classDef).methods.firstOrNull {
+                val candidates = mutableClassDefBy(classDef).methods.filter {
                     it.name == matchedMethod.name &&
                         it.parameterTypes.map { type -> type.toString() } == listOf("I") &&
                         it.returnType == "Z"
-                } ?: error("Could not resolve editable Rich HTML paste handler ${matchedMethod.definingClass}->${matchedMethod.name}")
+                }
+                val mutableMethod = candidates.singleOrNull()
+                    ?: error("Expected one editable Rich HTML paste handler ${matchedMethod.definingClass}->${matchedMethod.name}, found ${candidates.size}")
                 mutableMethod.addInstructions(
                     0,
                     """

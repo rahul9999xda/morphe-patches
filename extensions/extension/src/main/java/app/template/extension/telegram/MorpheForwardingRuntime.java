@@ -19,8 +19,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -84,11 +86,17 @@ public final class MorpheForwardingRuntime {
             if (store == null) store = new SharedPreferencesForwardingRuleStore(context);
             updateRuntimeStatus("Registering Telegram message listener");
             if (coordinator == null) {
-                Executor executor = Executors.newSingleThreadExecutor(command -> {
-                    Thread thread = new Thread(command, "MorpheForwarding");
-                    thread.setPriority(Thread.NORM_PRIORITY - 1);
-                    return thread;
-                });
+                // One worker preserves message/rule order. A bounded queue prevents an
+                // extended offline burst from consuming unbounded memory; rejection is
+                // surfaced by ForwardingCoordinator instead of silently dropping work.
+                ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                        1, 1, 0L, TimeUnit.MILLISECONDS,
+                        new ArrayBlockingQueue<Runnable>(256),
+                        command -> {
+                            Thread thread = new Thread(command, "MorpheForwarding");
+                            thread.setPriority(Thread.NORM_PRIORITY - 1);
+                            return thread;
+                        }, new ThreadPoolExecutor.AbortPolicy());
                 coordinator = new ForwardingCoordinator(store, new NativeGateway(profile), executor);
                 coordinator.start();
             }

@@ -122,7 +122,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                 String metric = metrics.next();
                 if (!("automation".equals(metric) || "forwardQueued".equals(metric)
                         || "copyQueued".equals(metric) || "forwarded".equals(metric)
-                        || "copied".equals(metric))) continue;
+                        || "copied".equals(metric) || "failed".equals(metric))) continue;
                 Object raw = values.opt(metric);
                 if (!(raw instanceof Number)) throw new JSONException("Invalid counter " + metric + " for rule " + id);
                 double number = ((Number) raw).doubleValue();
@@ -140,6 +140,10 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
         String value = status == null ? "" : status.trim();
         if (value.length() > 220) value = value.substring(0, 220);
         preferences.edit().putString("runtime_status", value).apply();
+    }
+
+    public synchronized void recordQueueFailure(String ruleId) {
+        increment(ruleId, "failed");
     }
 
     public String getRuntimeStatus() {

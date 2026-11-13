@@ -44,14 +44,23 @@ public final class ForwardingCoordinator {
                     if (!running) return;
                     final List<ForwardingRule> rules;
                     try { rules = store.loadRules(); }
-                    catch (Throwable ignored) { return; }
-                    if (rules == null) return;
+                    catch (Throwable error) {
+                        reportFailure(null, "Could not load forwarding rules", error);
+                        return;
+                    }
+                    if (rules == null) {
+                        reportFailure(null, "Rule store returned no rule list", null);
+                        return;
+                    }
                     for (ForwardingRule rule : rules) {
                         if (!running) return;
                         if (rule == null) continue;
                         final boolean matches;
                         try { matches = ForwardingRuleMatcher.matches(rule, message); }
-                        catch (Throwable ignored) { continue; }
+                        catch (Throwable error) {
+                            reportFailure(rule.getId(), "Rule matching failed", error);
+                            continue;
+                        }
                         if (!matches) continue;
                         if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
                             try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordAutomation(rule.getId()); }
@@ -68,7 +77,22 @@ public final class ForwardingCoordinator {
                 }
             });
         } catch (RuntimeException rejected) {
-            // A rejected event is not marked as handled; a later Telegram update can retry it.
+            // Bounded queue saturation is visible and counted. No recent/dedupe key is
+            // claimed until dispatch, so a later incoming update can retry this message.
+            reportFailure(null, "Automation queue is full; incoming event was not queued", rejected);
+        }
+    }
+
+    private void reportFailure(String ruleId, String message, Throwable error) {
+        String detail = message;
+        if (error != null) detail += " (" + error.getClass().getSimpleName() + ")";
+        if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+            app.template.extension.telegram.SharedPreferencesForwardingRuleStore prefs =
+                    (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
+            if (ruleId != null) {
+                try { prefs.recordQueueFailure(ruleId); } catch (Throwable ignored) { }
+            }
+            try { prefs.setRuntimeStatus(detail); } catch (Throwable ignored) { }
         }
     }
 
@@ -122,6 +146,9 @@ public final class ForwardingCoordinator {
                 if (!completed.compareAndSet(false, true)) return;
                 inFlight.remove(key);
                 synchronized (recentlyDispatched) { recentlyDispatched.remove(key); }
+                reportFailure(rule.getId(),
+                        (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? "Copy" : "Forward")
+                                + " failed for destination " + destination, error);
             }
         };
         try {

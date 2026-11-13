@@ -83,6 +83,7 @@ public final class MorpheSettingsActivity extends Activity {
         @Override public void run() {
             if (!isFinishing() && rulesContainer != null) {
                 refreshRuleStats();
+                if (runtimeStatusView != null) runtimeStatusView.setText(store.getRuntimeStatus());
                 statsHandler.postDelayed(this, 1500L);
             }
         }
@@ -147,15 +148,15 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private void buildScreen() {
-        // Resolve colors from the Telegram Activity theme so custom and dark themes
-        // remain readable instead of forcing a light, hard-coded palette.
-        colorBackground = Color.BLACK;
-        colorPrimary = Color.WHITE;
-        colorSecondary = 0xffbdbdbd;
-        colorAccent = 0xff4a9eff;
-        colorHint = 0xff888888;
-        boolean dark = true;
-        colorSurface = 0xff171717;
+        // Morphe Settings intentionally uses the earlier clean white appearance,
+        // independent of Telegram's currently selected dark theme.
+        colorBackground = 0xfffafafa;
+        colorPrimary = 0xff171717;
+        colorSecondary = 0xff666666;
+        colorAccent = 0xff171717;
+        colorHint = 0xff777777;
+        boolean dark = false;
+        colorSurface = Color.WHITE;
         final int background = colorBackground;
         final int surface = colorSurface;
         final int primary = colorPrimary;
@@ -214,6 +215,12 @@ public final class MorpheSettingsActivity extends Activity {
         LinearLayout.LayoutParams masterParams = params(-1, -2);
         masterParams.topMargin = dp(18);
         content.addView(masterCard, masterParams);
+
+        runtimeStatusView = label(store.getRuntimeStatus(), secondary);
+        runtimeStatusView.setTextSize(12);
+        LinearLayout statusParams = params(-1, -2);
+        statusParams.topMargin = dp(8);
+        content.addView(runtimeStatusView, statusParams);
 
         LinearLayout preferencesCard = card(surface);
         Button exportRules = button("Export all rules (backup)");
@@ -766,7 +773,8 @@ public final class MorpheSettingsActivity extends Activity {
                 ? "Forward queued: " + store.getCount(rule.getId(), "forwardQueued")
                 : "Copy queued: " + store.getCount(rule.getId(), "copyQueued");
         return "Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
-                + "\nAutomation: " + store.getCount(rule.getId(), "automation") + " · " + deliveryCount;
+                + "\nAutomation: " + store.getCount(rule.getId(), "automation") + " · " + deliveryCount
+                + " · Failed: " + store.getCount(rule.getId(), "failed");
     }
 
     /** Refresh count labels only; do not rebuild cards/buttons while the user is interacting. */
