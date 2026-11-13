@@ -323,9 +323,9 @@ public final class MorpheSettingsActivity extends Activity {
         note.setText("Choose source and destination chats from Telegram dialogs, or enter dialog IDs manually. Secret chats and service messages are excluded. Forward mode follows Telegram’s native forwarding eligibility; copy mode sends supported text as a new message.");
         note.setTextSize(12);
         note.setTextColor(secondary);
-        LinearLayout.LayoutParams noteParams = params(-1, -2);
-        noteParams.topMargin = dp(18);
-        content.addView(note, noteParams);
+        LinearLayout.LayoutParams forwardingNoteParams = params(-1, -2);
+        forwardingNoteParams.topMargin = dp(18);
+        content.addView(note, forwardingNoteParams);
     }
 
 

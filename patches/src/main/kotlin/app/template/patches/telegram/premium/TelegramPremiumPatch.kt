@@ -20,6 +20,7 @@ import app.template.patches.telegram.TelegramR8TranslationsAutoNormalFingerprint
 import app.template.patches.telegram.TelegramR8TranslationsAutoWebFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassNormalFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassWebFingerprint
+import app.template.patches.telegram.TelegramPlusR8MessagesControllerIsPremiumUserFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigIsPremiumFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigGetMaxAccountCountFingerprint
@@ -28,14 +29,8 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 @Suppress("unused")
 val telegramPremiumPatch = bytecodePatch(
     name = "Unlock Premium",
-    description = "Unlocks Telegram Premium features for the current account.",
+    description = "Unlocks the local Premium entitlement gates and supported legacy Premium conveniences.",
 ) {
-    // DEX-verified against Telegram 13.2.2 build 73031, Telegram Web 13.2.2
-    // build 73039, and Plus Messenger 13.2.1.0 build 22678. Current Plus
-    // premium-account and max-account-count gates use separate R8 fingerprints;
-    // translation/device-class hooks remain target-specific and are not guessed.
-    // Existing legacy targets are unchanged; only builds whose exact fingerprints resolve
-    // are eligible, so this does not broaden support by guessing renamed methods.
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
         TELEGRAM_WEB_COMPATIBILITY,
@@ -45,35 +40,34 @@ val telegramPremiumPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        val userConfigPremium =
-            TelegramPlusR8UserConfigIsPremiumFingerprint.methodOrNull
-                ?: UserConfigIsPremiumFingerprint.methodOrNull
-        // In Telegram/Web 13.2.2 R8, the historical UserConfig.isPremium()
-        // helper is inlined and the old c20 alias is not a UserConfig class.
-        // Patch it only on Plus/legacy where it actually resolves; the current
-        // Telegram/Web per-user entitlement gate below is the verified core gate.
-        userConfigPremium?.addInstructions(
-            0, """
-                const/4 v0, 0x1
-                return v0
-            """,
-        )
-
-        requireNotNull(
+        // Each APK has its own verified controller gate. Do not select the first
+        // non-null method across targets: doing so used to leave Plus without a
+        // controller entitlement hook.
+        val premiumUserMethod = requireNotNull(
             TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsPremiumUserWebFingerprint.methodOrNull
+                ?: TelegramPlusR8MessagesControllerIsPremiumUserFingerprint.methodOrNull
                 ?: MessagesControllerIsPremiumUserFingerprint.methodOrNull,
-        ) { "Missing verified per-user Premium gate" }
+        ) { "Missing target-specific MessagesController Premium gate" }
 
-        val premiumUserMethod =
-            TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
-                ?: TelegramR8MessagesControllerIsPremiumUserWebFingerprint.methodOrNull
-                ?: MessagesControllerIsPremiumUserFingerprint.methodOrNull
-        premiumUserMethod?.addInstructions(0, """
+        premiumUserMethod.addInstructions(0, """
             const/4 v0, 0x1
             return v0
         """)
 
+        // Telegram/Web 13.2.2 use an R8 controller-level entitlement gate;
+        // Plus 13.2.1.0 additionally consults UserConfig for the active account.
+        val userConfigPremium =
+            TelegramPlusR8UserConfigIsPremiumFingerprint.methodOrNull
+                ?: UserConfigIsPremiumFingerprint.methodOrNull
+        userConfigPremium?.addInstructions(0, """
+            const/4 v0, 0x1
+            return v0
+        """)
+
+        // Translation toggles are present in the Telegram and Telegram Web
+        // targets. Their Plus equivalents are not assumed without a verified
+        // matching implementation.
         val translationsManual =
             TelegramR8TranslationsManualNormalFingerprint.methodOrNull
                 ?: TelegramR8TranslationsManualWebFingerprint.methodOrNull
@@ -92,6 +86,9 @@ val telegramPremiumPatch = bytecodePatch(
             return v0
         """)
 
+        // Plus-specific account gates are verified separately. Keep the
+        // account-count initialization side effect (jm1.z0) when overriding
+        // the getter; simply returning 999 left the cached count stale.
         val hasPremiumOnAccounts =
             TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
                 ?: UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
@@ -100,14 +97,23 @@ val telegramPremiumPatch = bytecodePatch(
             return v0
         """)
 
-        val maxAccountCount =
+        val plusMaxAccountCount =
             TelegramPlusR8UserConfigGetMaxAccountCountFingerprint.methodOrNull
-                ?: UserConfigGetMaxAccountCountFingerprint.methodOrNull
-        maxAccountCount?.addInstructions(0, """
-            const/16 v0, 0x3E7
-            return v0
-        """)
+        if (plusMaxAccountCount != null) {
+            plusMaxAccountCount.addInstructions(0, """
+                const/16 v0, 0x3E7
+                sput v0, Lorg/telegram/messenger/jm1;->z0:I
+                return v0
+            """)
+        } else {
+            UserConfigGetMaxAccountCountFingerprint.methodOrNull?.addInstructions(0, """
+                const/16 v0, 0x3E7
+                return v0
+            """)
+        }
 
+        // Device performance class is only changed on the two targets where
+        // the exact R8/legacy accessor is known. It is not guessed for Plus.
         val devicePerformanceClass =
             TelegramR8DevicePerformanceClassNormalFingerprint.methodOrNull
                 ?: TelegramR8DevicePerformanceClassWebFingerprint.methodOrNull

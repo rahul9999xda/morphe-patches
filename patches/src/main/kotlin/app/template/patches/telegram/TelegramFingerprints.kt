@@ -1385,7 +1385,7 @@ val TelegramPlusR8CheckCanOpenChat4Fingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/ko0;", name = "ua", returnType = "Z",
     parameters = listOf(
         "Landroid/os/Bundle;", "Lorg/telegram/ui/ActionBar/l2;",
-        "Lorg/telegram/messenger/x20;", "Lgl/e$c;",
+        "Lorg/telegram/messenger/x20;", "Lgl/e\$c;",
     ),
 )
 val TelegramPlusR8IsChatNoForwardsFingerprint = Fingerprint(
@@ -1427,6 +1427,10 @@ val TelegramPlusR8SecretMediaViewerCloseFingerprint = Fingerprint(
 )
 val TelegramPlusR8UserConfigIsPremiumFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/jm1;", name = "H", returnType = "Z",
+)
+val TelegramPlusR8MessagesControllerIsPremiumUserFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/ko0;", name = "yf", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$User;"),
 )
 val TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/jm1;", name = "D", returnType = "Z",
