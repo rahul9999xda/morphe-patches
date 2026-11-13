@@ -8,8 +8,6 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsFingerprint
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsLegacyFingerprint
-import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredNormalFingerprint
-import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredWebFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8GetSponsoredMessagesFingerprint
@@ -54,27 +52,11 @@ val telegramRemoveAdsPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        val currentMessageObjectMethod =
-            TelegramR8MessageObjectIsSponsoredNormalFingerprint.methodOrNull
-                ?: TelegramR8MessageObjectIsSponsoredWebFingerprint.methodOrNull
-        val sponsoredMethod = currentMessageObjectMethod
-            ?: messageObjectIsSponsoredFingerprint.methodOrNull
-        if (sponsoredMethod != null) {
-            sponsoredMethod.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
-        } else {
-            // Plus Messenger has no standalone MessageObject.isSponsored() method.
-            // Its controller owns the sponsored-message cache/request path instead.
-            val plusSponsoredLoader = TelegramPlusR8GetSponsoredMessagesFingerprint.methodOrNull
-            requireNotNull(plusSponsoredLoader) {
-                "Missing sponsored-message classifier or audited Plus sponsored loader"
-            }.addInstructions(0, """
-                const/4 v0, 0x0
-                return-object v0
-            """)
-        }
+        // Do not patch MessageObject.s4() on current 13.2.2 R8 builds.
+        // DEX inspection shows the Web implementation is a Star Gift predicate,
+        // not a sponsored-message classifier. Returning false here corrupts
+        // unrelated message semantics and does not reliably hide sponsored cards.
+        // Keep only independently identified controller/ad-loader hooks below.
 
         val currentControllerMethod =
             TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
