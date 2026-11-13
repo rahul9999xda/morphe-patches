@@ -62,11 +62,12 @@ val telegramRemoveAdsPatch = bytecodePatch(
             TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint.methodOrNull
                 ?: TelegramPlusR8IsSponsoredDisabledFingerprint.methodOrNull
-        (currentControllerMethod ?: messagesControllerIsSponsoredDisabledFingerprint.methodOrNull)
-            ?.addInstructions(0, """
-                const/4 v0, 0x1
-                return v0
-            """)
+        requireNotNull(currentControllerMethod ?: messagesControllerIsSponsoredDisabledFingerprint.methodOrNull) {
+            "Missing sponsored-message disable predicate; refusing a partial Remove Ads patch"
+        }.addInstructions(0, """
+            const/4 v0, 0x1
+            return v0
+        """)
 
         // Some current R8 builds inline the sponsored-message cache path into the
         // controller; retain the named cache hook only when the exact local method exists.
@@ -75,7 +76,9 @@ val telegramRemoveAdsPatch = bytecodePatch(
             return-object v0
         """)
 
-        videoAdsLoadFingerprint.methodOrNull?.addInstructions(0, "return-void")
+        requireNotNull(videoAdsLoadFingerprint.methodOrNull) {
+            "Missing VideoAds.load()V; refusing to leave video-ad loading active"
+        }.addInstructions(0, "return-void")
 
         // Plus Messenger's current R8 controller also owns the sponsored-message request cache.
         // Keep the historical no-argument signature as a separate fallback for older Plus builds.

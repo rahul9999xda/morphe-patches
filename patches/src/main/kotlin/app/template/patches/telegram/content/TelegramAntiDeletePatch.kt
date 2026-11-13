@@ -96,10 +96,15 @@ val telegramAntiDeletePatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        val currentR8UpdateMethod =
-            TelegramR8ProcessUpdateArrayNormalFingerprint.methodOrNull
-                ?: TelegramR8ProcessUpdateArrayWebFingerprint.methodOrNull
-                ?: TelegramPlusR8ProcessUpdateArrayFingerprint.methodOrNull
+        val currentR8UpdateMethods = listOf(
+            TelegramR8ProcessUpdateArrayNormalFingerprint,
+            TelegramR8ProcessUpdateArrayWebFingerprint,
+            TelegramPlusR8ProcessUpdateArrayFingerprint,
+        ).mapNotNull { it.methodOrNull }
+        require(currentR8UpdateMethods.size <= 1) {
+            "Multiple current R8 update-array dispatchers matched; refusing an ambiguous Anti-delete patch"
+        }
+        val currentR8UpdateMethod = currentR8UpdateMethods.singleOrNull()
 
         if (currentR8UpdateMethod != null) {
             // In Telegram/Web 13.2.2 (Android build 73031 / Web build 73039), and Plus 13.2.1.0 build 22678,

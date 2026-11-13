@@ -163,9 +163,11 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
                 "Expected one SecretMediaViewer.o1 callback read, found ${callbackFieldIndexes.size}"
             }
             val callbackFieldIndex = callbackFieldIndexes.single()
-            runIndexes.firstOrNull { it > callbackFieldIndex } ?: error(
-                "Could not resolve Runnable.run() following SecretMediaViewer.o1"
-            )
+            val closeCallbackRuns = runIndexes.filter { it > callbackFieldIndex }
+            require(closeCallbackRuns.size == 1) {
+                "Expected exactly one close callback Runnable.run() after SecretMediaViewer.o1, found ${closeCallbackRuns.size}"
+            }
+            closeCallbackRuns.single()
         }
         require(callbackIndex in runIndexes) { "Resolved callback index is not a Runnable.run() call" }
 
