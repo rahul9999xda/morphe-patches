@@ -46,9 +46,6 @@ public final class ForwardingCoordinator {
                     try { rules = store.loadRules(); }
                     catch (Throwable ignored) { return; }
                     if (rules == null) return;
-                    if (message.isStickerOrEmojiOnly()
-                            && store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore
-                            && ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).isIgnoreStickerEmojiOnly()) return;
                     for (ForwardingRule rule : rules) {
                         if (!running) return;
                         if (rule == null) continue;

@@ -54,7 +54,6 @@ public final class MorpheSettingsActivity extends Activity {
                 runOnUiThread(() -> {
                     if (store == null || isFinishing()) return;
                     syncMasterSwitch();
-                    MorpheStatusNotification.update(this, store.isEnabled());
                 });
             };
     private EditText nameInput;
@@ -93,7 +92,6 @@ public final class MorpheSettingsActivity extends Activity {
         super.onResume();
         registerEnabledPreferenceListener();
         syncMasterSwitch();
-        if (store != null) MorpheStatusNotification.update(this, store.isEnabled());
         statsHandler.removeCallbacks(statsRefresh);
         statsHandler.postDelayed(statsRefresh, 1500L);
     }
@@ -130,7 +128,6 @@ public final class MorpheSettingsActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus && store != null && enabledSwitch != null) {
             syncMasterSwitch();
-            MorpheStatusNotification.update(this, store.isEnabled());
         }
     }
 
@@ -147,19 +144,18 @@ public final class MorpheSettingsActivity extends Activity {
         MorpheRulesBackup.schedule(this);
         buildScreen();
         refreshRules();
-        MorpheStatusNotification.update(this, store.isEnabled());
     }
 
     private void buildScreen() {
         // Resolve colors from the Telegram Activity theme so custom and dark themes
         // remain readable instead of forcing a light, hard-coded palette.
-        colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfff1f1f3);
-        colorPrimary = resolveThemeColor(android.R.attr.textColorPrimary, 0xff202124);
-        colorSecondary = resolveThemeColor(android.R.attr.textColorSecondary, 0xff666666);
-        colorAccent = resolveThemeColor(android.R.attr.colorAccent, 0xff168acd);
-        colorHint = resolveThemeColor(android.R.attr.textColorHint, colorSecondary);
-        boolean dark = isColorDark(colorBackground);
-        colorSurface = dark ? blend(colorBackground, Color.WHITE, 0.085f) : blend(colorBackground, Color.WHITE, 0.72f);
+        colorBackground = Color.BLACK;
+        colorPrimary = Color.WHITE;
+        colorSecondary = 0xffbdbdbd;
+        colorAccent = 0xff4a9eff;
+        colorHint = 0xff888888;
+        boolean dark = true;
+        colorSurface = 0xff171717;
         final int background = colorBackground;
         final int surface = colorSurface;
         final int primary = colorPrimary;
@@ -213,33 +209,13 @@ public final class MorpheSettingsActivity extends Activity {
         enabledSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (syncingEnabledSwitch) return;
             store.setEnabled(checked);
-            if (checked) ensureNotificationPermission();
-            MorpheStatusNotification.update(this, checked);
             Toast.makeText(this, checked ? "Automatic forwarding enabled" : "Automatic forwarding paused", Toast.LENGTH_SHORT).show();
         });
-        Button notificationButton = compactButton("Enable notification-panel control");
-        LinearLayout.LayoutParams notificationButtonParams = params(-1, dp(40));
-        notificationButtonParams.topMargin = dp(7);
-        masterCard.addView(notificationButton, notificationButtonParams);
-        notificationButton.setOnClickListener(v -> ensureNotificationPermission());
         LinearLayout.LayoutParams masterParams = params(-1, -2);
         masterParams.topMargin = dp(18);
         content.addView(masterCard, masterParams);
 
-        runtimeStatusView = label("Listener: " + store.getRuntimeStatus(), secondary);
-        runtimeStatusView.setTextSize(12);
-        LinearLayout.LayoutParams runtimeStatusParams = params(-1, -2);
-        runtimeStatusParams.topMargin = dp(8);
-        content.addView(runtimeStatusView, runtimeStatusParams);
-
         LinearLayout preferencesCard = card(surface);
-        ignoreStickerEmojiSwitch = new Switch(this);
-        ignoreStickerEmojiSwitch.setText("Ignore sticker-only and emoji-only messages (Copy and Forward)");
-        ignoreStickerEmojiSwitch.setTextSize(14);
-        ignoreStickerEmojiSwitch.setTextColor(primary);
-        ignoreStickerEmojiSwitch.setChecked(store.isIgnoreStickerEmojiOnly());
-        ignoreStickerEmojiSwitch.setOnCheckedChangeListener((button, checked) -> store.setIgnoreStickerEmojiOnly(checked));
-        preferencesCard.addView(ignoreStickerEmojiSwitch, params(-1, -2));
         Button exportRules = button("Export all rules (backup)");
         preferencesCard.addView(exportRules, params(-1, dp(44)));
         exportRules.setOnClickListener(v -> exportRules());
@@ -285,6 +261,14 @@ public final class MorpheSettingsActivity extends Activity {
         showSenderSwitch.setTextColor(primary);
         showSenderSwitch.setTextSize(14);
         form.addView(showSenderSwitch, params(-1, -2));
+        ignoreStickerEmojiSwitch = new Switch(this);
+        ignoreStickerEmojiSwitch.setText("Ignore sticker-only and emoji-only messages");
+        ignoreStickerEmojiSwitch.setTextColor(primary);
+        ignoreStickerEmojiSwitch.setTextSize(14);
+        ignoreStickerEmojiSwitch.setChecked(true);
+        LinearLayout.LayoutParams ignoreParams = params(-1, -2);
+        ignoreParams.topMargin = dp(8);
+        form.addView(ignoreStickerEmojiSwitch, ignoreParams);
 
         caseSensitiveSwitch = new Switch(this);
         caseSensitiveSwitch.setText("Case-sensitive keyword matching");
@@ -328,27 +312,6 @@ public final class MorpheSettingsActivity extends Activity {
         content.addView(note, forwardingNoteParams);
     }
 
-
-    private void ensureNotificationPermission() {
-        if (android.os.Build.VERSION.SDK_INT < 33 || MorpheStatusNotification.hasPermission(this)) {
-            MorpheStatusNotification.update(this, store.isEnabled());
-            Toast.makeText(this, "Morphe notification control is enabled", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATION_PERMISSION);
-    }
-
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_NOTIFICATION_PERMISSION) return;
-        boolean granted = grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        if (granted) {
-            MorpheStatusNotification.update(this, store.isEnabled());
-            Toast.makeText(this, "Morphe notification-panel control enabled", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(this, "Notification permission is needed for the quick toggle. Automation settings still work here.", Toast.LENGTH_LONG).show();
-        }
-    }
 
     /** Searchable multi-select dialog for choosing source or destination chats. */
     private void exportRules() {
@@ -399,8 +362,6 @@ public final class MorpheSettingsActivity extends Activity {
                                 int count = store.importBackupJson(backupJson);
                                 refreshRules();
                                 if (enabledSwitch != null) enabledSwitch.setChecked(store.isEnabled());
-                                if (ignoreStickerEmojiSwitch != null) ignoreStickerEmojiSwitch.setChecked(store.isIgnoreStickerEmojiOnly());
-                                MorpheStatusNotification.update(this, store.isEnabled());
                                 Toast.makeText(this, "Restored " + count + " rules", Toast.LENGTH_LONG).show();
                             } catch (Throwable error) { Toast.makeText(this, "Restore failed; current rules were preserved. " + error.getClass().getSimpleName(), Toast.LENGTH_LONG).show(); }
                         }).show();
@@ -641,7 +602,7 @@ public final class MorpheSettingsActivity extends Activity {
                     matchSpinner.getSelectedItemPosition() == 1 ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                     caseSensitiveSwitch.isChecked(), deliverySpinner.getSelectedItemPosition() == 1
                             ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                    showSenderSwitch.isChecked());
+                    showSenderSwitch.isChecked(), ignoreStickerEmojiSwitch.isChecked());
             if (editingRuleId == null) {
                 rules.add(rule);
             } else {
@@ -679,6 +640,7 @@ public final class MorpheSettingsActivity extends Activity {
         if (deliverySpinner != null) deliverySpinner.setSelection(0);
         if (caseSensitiveSwitch != null) caseSensitiveSwitch.setChecked(false);
         if (showSenderSwitch != null) showSenderSwitch.setChecked(false);
+        if (ignoreStickerEmojiSwitch != null) ignoreStickerEmojiSwitch.setChecked(true);
         if (saveRuleButton != null) saveRuleButton.setText("Save forwarding rule");
         if (cancelEditButton != null) cancelEditButton.setVisibility(View.GONE);
     }
@@ -792,7 +754,7 @@ public final class MorpheSettingsActivity extends Activity {
             if (!r.getId().equals(target.getId())) { updated.add(r); continue; }
             updated.add(new ForwardingRule(r.getId(), r.getName(), enabled, r.getSourceChatIds(),
                     r.getDestinationChatIds(), r.getIncludeKeywords(), r.getExcludeKeywords(),
-                    r.getMatchMode(), r.isCaseSensitive(), r.getDeliveryMode(), r.isShowSenderName()));
+                    r.getMatchMode(), r.isCaseSensitive(), r.getDeliveryMode(), r.isShowSenderName(), r.isIgnoreStickerEmojiOnly()));
         }
         store.saveRules(updated);
         refreshRules();
@@ -800,16 +762,16 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private String ruleDetailsText(ForwardingRule rule) {
+        String deliveryCount = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.FORWARD
+                ? "Forward queued: " + store.getCount(rule.getId(), "forwardQueued")
+                : "Copy queued: " + store.getCount(rule.getId(), "copyQueued");
         return "Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
-                + "\nAutomation: " + store.getCount(rule.getId(), "automation")
-                + " · Forward queued: " + store.getCount(rule.getId(), "forwardQueued")
-                + " · Copy queued: " + store.getCount(rule.getId(), "copyQueued");
+                + "\nAutomation: " + store.getCount(rule.getId(), "automation") + " · " + deliveryCount;
     }
 
     /** Refresh count labels only; do not rebuild cards/buttons while the user is interacting. */
     private void refreshRuleStats() {
         if (store == null) return;
-        if (runtimeStatusView != null) runtimeStatusView.setText("Listener: " + store.getRuntimeStatus());
         for (ForwardingRule rule : store.loadAllRules()) {
             TextView view = ruleStatsViews.get(rule.getId());
             if (view != null) view.setText(ruleDetailsText(rule));
@@ -829,6 +791,7 @@ public final class MorpheSettingsActivity extends Activity {
         deliverySpinner.setSelection(rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? 1 : 0);
         caseSensitiveSwitch.setChecked(rule.isCaseSensitive());
         showSenderSwitch.setChecked(rule.isShowSenderName());
+        ignoreStickerEmojiSwitch.setChecked(rule.isIgnoreStickerEmojiOnly());
         Toast.makeText(this, "Rule loaded for editing; save to apply changes", Toast.LENGTH_SHORT).show();
     }
     private String joinIds(Set<Long> ids) {

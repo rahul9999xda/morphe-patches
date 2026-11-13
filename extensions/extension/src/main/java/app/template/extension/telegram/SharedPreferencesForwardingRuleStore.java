@@ -19,7 +19,6 @@ import java.util.Set;
 public final class SharedPreferencesForwardingRuleStore implements ForwardingRuleStore {
     public static final String PREFS = "morphe_forwarding";
     public static final String KEY_ENABLED = "enabled";
-    public static final String KEY_IGNORE_STICKER_EMOJI_ONLY = "ignore_sticker_emoji_only";
     private final SharedPreferences preferences;
 
     public SharedPreferencesForwardingRuleStore(Context context) {
@@ -28,8 +27,6 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
 
     public boolean isEnabled() { return preferences.getBoolean(KEY_ENABLED, false); }
     public void setEnabled(boolean enabled) { preferences.edit().putBoolean(KEY_ENABLED, enabled).apply(); }
-    public boolean isIgnoreStickerEmojiOnly() { return preferences.getBoolean(KEY_IGNORE_STICKER_EMOJI_ONLY, true); }
-    public void setIgnoreStickerEmojiOnly(boolean enabled) { preferences.edit().putBoolean(KEY_IGNORE_STICKER_EMOJI_ONLY, enabled).apply(); }
 
     /** Portable versioned backup containing all rules, global switches and per-rule counters. */
     public synchronized String exportBackupJson() throws JSONException {
@@ -38,7 +35,6 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
         root.put("version", 1);
         root.put("createdAt", System.currentTimeMillis());
         root.put("enabled", isEnabled());
-        root.put(KEY_IGNORE_STICKER_EMOJI_ONLY, isIgnoreStickerEmojiOnly());
         root.put("rules", new JSONArray(preferences.getString("rules", "[]")));
         root.put("rule_stats", new JSONObject(preferences.getString("rule_stats", "{}")));
         return root.toString(2);
@@ -54,7 +50,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
         JSONArray rules = root.optJSONArray("rules");
         if (rules == null) throw new JSONException("Backup has no rules array");
         if (rules.length() > 1000) throw new JSONException("Backup contains too many rules");
-        if (!isBoolean(root, "enabled") || !isBoolean(root, KEY_IGNORE_STICKER_EMOJI_ONLY))
+        if (!isBoolean(root, "enabled"))
             throw new JSONException("Backup contains invalid global settings");
         Set<String> ids = new LinkedHashSet<>();
         for (int i = 0; i < rules.length(); i++) {
@@ -81,7 +77,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                     throw new IllegalArgumentException("Unknown keyword match mode");
                 if (!("COPY".equals(delivery) || "FORWARD".equals(delivery)))
                     throw new IllegalArgumentException("Unknown delivery mode");
-                if (!isBoolean(r, "enabled") || !isBoolean(r, "caseSensitive") || !isBoolean(r, "showSenderName"))
+                if (!isBoolean(r, "enabled") || !isBoolean(r, "caseSensitive") || !isBoolean(r, "showSenderName") || (r.has("ignoreStickerEmojiOnly") && !isBoolean(r, "ignoreStickerEmojiOnly")))
                     throw new IllegalArgumentException("Invalid rule boolean setting");
                 JSONArray include = r.optJSONArray("include");
                 JSONArray exclude = r.optJSONArray("exclude");
@@ -92,14 +88,13 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                         "ALL".equals(match) ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                         r.optBoolean("caseSensitive", false),
                         "COPY".equals(delivery) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                        r.optBoolean("showSenderName", false));
+                        r.optBoolean("showSenderName", false), r.optBoolean("ignoreStickerEmojiOnly", true));
             } catch (RuntimeException invalid) { throw new JSONException("Invalid rule at index " + i + ": " + invalid.getMessage()); }
         }
         JSONObject stats = root.optJSONObject("rule_stats");
         JSONObject cleanStats = validateStats(stats, ids);
         SharedPreferences.Editor e = preferences.edit().putString("rules", rules.toString())
                 .putBoolean(KEY_ENABLED, root.optBoolean("enabled", false))
-                .putBoolean(KEY_IGNORE_STICKER_EMOJI_ONLY, root.optBoolean(KEY_IGNORE_STICKER_EMOJI_ONLY, true))
                 .putString("rule_stats", cleanStats.toString());
         if (!e.commit()) throw new JSONException("Could not save restored rules");
         return rules.length();
@@ -171,7 +166,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                         "ALL".equals(item.optString("match")) ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                         item.optBoolean("caseSensitive", false),
                         "COPY".equals(item.optString("delivery")) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                        item.optBoolean("showSenderName", false)));
+                        item.optBoolean("showSenderName", false), item.optBoolean("ignoreStickerEmojiOnly", true)));
             }
         } catch (Throwable ignored) { }
         return result;
@@ -194,6 +189,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                 item.put("caseSensitive", rule.isCaseSensitive());
                 item.put("delivery", rule.getDeliveryMode().name());
                 item.put("showSenderName", rule.isShowSenderName());
+                item.put("ignoreStickerEmojiOnly", rule.isIgnoreStickerEmojiOnly());
                 array.put(item);
             } catch (Throwable ignored) { }
         }

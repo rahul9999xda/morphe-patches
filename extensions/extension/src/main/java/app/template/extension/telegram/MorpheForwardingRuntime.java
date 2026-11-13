@@ -83,7 +83,6 @@ public final class MorpheForwardingRuntime {
             MorpheRulesBackup.schedule(context);
             if (store == null) store = new SharedPreferencesForwardingRuleStore(context);
             updateRuntimeStatus("Registering Telegram message listener");
-            MorpheStatusNotification.update(context, store.isEnabled());
             if (coordinator == null) {
                 Executor executor = Executors.newSingleThreadExecutor(command -> {
                     Thread thread = new Thread(command, "MorpheForwarding");

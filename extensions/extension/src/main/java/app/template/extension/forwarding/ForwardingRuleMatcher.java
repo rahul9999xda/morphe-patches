@@ -11,6 +11,7 @@ public final class ForwardingRuleMatcher {
         if (rule == null || message == null || !rule.isEnabled()) return false;
         if (!rule.getSourceChatIds().contains(message.getSourceChatId())) return false;
         if (message.isOutgoing() || message.isSecretChat() || message.isServiceMessage()) return false;
+        if (rule.isIgnoreStickerEmojiOnly() && message.isStickerOrEmojiOnly()) return false;
         // Protected text can be copied when the user's separate content-restriction
         // patch permits it. Native FORWARD remains subject to Telegram's eligibility.
         if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.FORWARD && !message.canForward()) return false;

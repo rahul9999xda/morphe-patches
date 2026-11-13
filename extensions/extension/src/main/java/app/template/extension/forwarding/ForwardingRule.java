@@ -22,6 +22,7 @@ public final class ForwardingRule {
     private final boolean caseSensitive;
     private final DeliveryMode deliveryMode;
     private final boolean showSenderName;
+    private final boolean ignoreStickerEmojiOnly;
 
     public ForwardingRule(
             String id,
@@ -34,13 +35,19 @@ public final class ForwardingRule {
             MatchMode matchMode,
             boolean caseSensitive,
             DeliveryMode deliveryMode) {
-        this(id, name, enabled, sourceChatIds, destinationChatIds, includeKeywords, excludeKeywords, matchMode, caseSensitive, deliveryMode, false);
+        this(id, name, enabled, sourceChatIds, destinationChatIds, includeKeywords, excludeKeywords, matchMode, caseSensitive, deliveryMode, false, true);
     }
 
     public ForwardingRule(
             String id, String name, boolean enabled, Set<Long> sourceChatIds, Set<Long> destinationChatIds,
             List<String> includeKeywords, List<String> excludeKeywords, MatchMode matchMode,
             boolean caseSensitive, DeliveryMode deliveryMode, boolean showSenderName) {
+        this(id, name, enabled, sourceChatIds, destinationChatIds, includeKeywords, excludeKeywords, matchMode, caseSensitive, deliveryMode, showSenderName, true);
+    }
+
+    public ForwardingRule(String id, String name, boolean enabled, Set<Long> sourceChatIds, Set<Long> destinationChatIds,
+            List<String> includeKeywords, List<String> excludeKeywords, MatchMode matchMode,
+            boolean caseSensitive, DeliveryMode deliveryMode, boolean showSenderName, boolean ignoreStickerEmojiOnly) {
         if (id == null || id.trim().isEmpty()) throw new IllegalArgumentException("Rule id is required");
         if (name == null || name.trim().isEmpty()) throw new IllegalArgumentException("Rule name is required");
         this.id = id;
@@ -54,6 +61,7 @@ public final class ForwardingRule {
         this.caseSensitive = caseSensitive;
         this.deliveryMode = deliveryMode == null ? DeliveryMode.FORWARD : deliveryMode;
         this.showSenderName = showSenderName;
+        this.ignoreStickerEmojiOnly = ignoreStickerEmojiOnly;
         if (this.sourceChatIds.isEmpty()) throw new IllegalArgumentException("At least one source chat is required");
         if (this.destinationChatIds.isEmpty()) throw new IllegalArgumentException("At least one destination chat is required");
     }
@@ -83,4 +91,5 @@ public final class ForwardingRule {
     public boolean isCaseSensitive() { return caseSensitive; }
     public DeliveryMode getDeliveryMode() { return deliveryMode; }
     public boolean isShowSenderName() { return showSenderName; }
+    public boolean isIgnoreStickerEmojiOnly() { return ignoreStickerEmojiOnly; }
 }
