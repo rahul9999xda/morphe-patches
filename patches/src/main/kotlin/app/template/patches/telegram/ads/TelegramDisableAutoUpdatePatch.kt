@@ -9,6 +9,8 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.PlusUpdateButtonUpdateFingerprint
+import app.template.patches.telegram.PlusR8IsAppUpdateAvailableFingerprint
+import app.template.patches.telegram.PlusR8HasPendingAppUpdateFingerprint
 import app.template.patches.telegram.TelegramR8IsAppUpdateAvailableWebFingerprint
 import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalNormalFingerprint
 import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalWebFingerprint
@@ -35,10 +37,22 @@ private val messagesControllerCheckPromoInfoInternalFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-// Telegram Android 13.2.1 inlines isAppUpdateAvailable(). Its update response
-// writes the result into SharedConfig.tz.j1; suppress those stores without
-// mutating the response object or unrelated local variables.
-private val telegramR8UpdateObjectStoreNormalFingerprint = Fingerprint(
+// Telegram 13.2.2 uses different SharedConfig owners in the two APK variants:
+// Android stores the update in org.telegram.messenger.uz.j1; Web stores it in
+// org.telegram.messenger.tz.j1. The exact static-field write is the hook, not a
+// guessed method name. Keep the older named SharedConfig predicate below for legacy.
+private val telegramR8UpdateObjectStoreAndroidFingerprint = Fingerprint(
+    filters = listOf(
+        fieldAccess(
+            definingClass = "Lorg/telegram/messenger/uz;",
+            name = "j1",
+            type = "Lorg/telegram/tgnet/TLRPC\$TL_help_appUpdate;",
+            opcode = Opcode.SPUT_OBJECT,
+        ),
+    ),
+)
+
+private val telegramR8UpdateObjectStoreWebFingerprint = Fingerprint(
     filters = listOf(
         fieldAccess(
             definingClass = "Lorg/telegram/messenger/tz;",
@@ -64,6 +78,7 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
     execute {
         val updateAvailable =
             TelegramR8IsAppUpdateAvailableWebFingerprint.methodOrNull
+                ?: PlusR8IsAppUpdateAvailableFingerprint.methodOrNull
                 ?: sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull
         if (updateAvailable != null) {
             updateAvailable.addInstructions(0, """
@@ -71,21 +86,41 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
                 return v0
             """)
         } else {
-            // Normal Telegram 13.2.1 has no standalone availability predicate;
-            // prevent its update object from being published to the shared config.
-            val updateStores = telegramR8UpdateObjectStoreNormalFingerprint.matchAllOrNull().orEmpty()
-            require(updateStores.isNotEmpty()) {
-                "Missing SharedConfig.isAppUpdateAvailable() and update-object store hook"
-            }
-            updateStores.forEach { match ->
-                match.instructionMatches.map { it.index }.distinct().sortedDescending().forEach { index ->
-                    match.method.replaceInstruction(index, "nop")
+            // Current Android and Web APKs both inline the update-availability gate.
+            // Their actual update-object owners differ (uz.j1 vs tz.j1). Replace only
+            // exact SPUT_OBJECT writes to those fields; leave all unrelated initialization
+            // and update-response parsing intact. The legacy named predicate remains above.
+            val updateStores = (
+                telegramR8UpdateObjectStoreAndroidFingerprint.matchAllOrNull().orEmpty() +
+                    telegramR8UpdateObjectStoreWebFingerprint.matchAllOrNull().orEmpty()
+                ).distinctBy { match -> match.method to match.instructionMatches.map { it.index } }
+            if (updateStores.isNotEmpty()) {
+                updateStores.forEach { match ->
+                    match.instructionMatches.map { it.index }.distinct().sortedDescending().forEach { index ->
+                        match.method.replaceInstruction(index, "nop")
+                    }
+                }
+            } else {
+                require(
+                    sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull != null ||
+                        PlusR8IsAppUpdateAvailableFingerprint.methodOrNull != null ||
+                        PlusUpdateButtonUpdateFingerprint.methodOrNull != null
+                ) {
+                    "Missing current uz.j1/tz.j1 update-store hooks and legacy/Plus update UI hooks"
                 }
             }
         }
 
+        // Plus has a second UI-facing predicate which checks the pending update object
+        // directly. Disable it as well, so drawer/update-button surfaces stay hidden even
+        // if an update response populated the cached object through another callback.
+        PlusR8HasPendingAppUpdateFingerprint.methodOrNull?.addInstructions(0, """
+            const/4 v0, 0x0
+            return v0
+        """)
+
         // setNewAppVersionAvailable(TL_help_appUpdate) was removed/inlined by R8 in
-        // 13.2.1; keep the named hook only for Plus/legacy variants where it is local.
+        // 13.2.2; keep the named hook only for Plus/legacy variants where it is local.
         sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull?.addInstructions(0, """
             const/4 v0, 0x0
             return v0

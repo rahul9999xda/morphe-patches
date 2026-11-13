@@ -31,12 +31,12 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
         // original method uses for its non-rich-HTML fallback. All other menu
         // actions continue through the original method unchanged.
         val currentTargets = listOf(
-            // Telegram 13.2.1: yf extends ht; Telegram Web 13.2.1: ag extends ft.
-            // These methods are the actual EditText-backed composer controls.
-            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/ht;",
+            // Telegram Android 13.2.2: yf extends jt; Telegram Web 13.2.2: hh.j1 extends Components/ft.
+            // Invoke the immediate superclass implementation, not an ancestor or interface.
+            TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/jt;",
             TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
-            // Plus Messenger 13.1.1.1: current composer inner class r2 extends xh0.
-            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/xh0;",
+            // Plus Messenger 13.2.1.0 build 22678: composer input view iv.l2 extends rh0.
+            TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/rh0;",
             // Historical named targets retained independently.
             ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to
                 "Lorg/telegram/ui/Components/mg;",

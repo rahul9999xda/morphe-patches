@@ -9,6 +9,8 @@ import app.template.patches.telegram.StoriesReadReceiptFlowFingerprint
 import app.template.patches.telegram.StoriesReadReceiptFlowLegacyFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptNormalFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptWebFingerprint
+import app.template.patches.telegram.TelegramPlusR8StoriesReadReceiptFingerprint
+import app.template.patches.telegram.TelegramPlusR8StoriesReadReceiptByDialogFingerprint
 
 @Suppress("unused")
 val telegramHideStoriesReadPatch = bytecodePatch(
@@ -25,19 +27,37 @@ val telegramHideStoriesReadPatch = bytecodePatch(
     execute {
         // The target method returns Z. Returning true preserves its success/handled
         // contract while skipping the local read update and TL_stories_readStories request.
-        val currentR8Method =
-            TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull
-                ?: TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull
-        val method = currentR8Method
-            ?: StoriesReadReceiptFlowFingerprint.methodOrNull
-            ?: StoriesReadReceiptFlowLegacyFingerprint.methodOrNull
-        requireNotNull(method) { "No audited Stories read-receipt method matched this APK" }
-        method.addInstructions(
-            0,
-            """
-                const/4 v0, 0x1
-                return v0
-            """,
-        )
+        // Telegram Android and Web use independently fingerprinted boolean
+        // dispatchers (wg.f5.Y and zg.d5.Y). Plus has two independent request paths
+        // in StoriesController rc: R1(PeerStories,
+        // StoryItem, boolean)Z and O1(long)V. Both construct
+        // TL_stories_readStories, so both must be stopped on Plus.
+        val currentR8Methods = listOfNotNull(
+            TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull,
+            TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull,
+            TelegramPlusR8StoriesReadReceiptFingerprint.methodOrNull,
+        ).distinct()
+        val plusDialogMethod = TelegramPlusR8StoriesReadReceiptByDialogFingerprint.methodOrNull
+
+        if (currentR8Methods.isNotEmpty() || plusDialogMethod != null) {
+            currentR8Methods.forEach { method ->
+                method.addInstructions(0, """
+                    const/4 v0, 0x1
+                    return v0
+                """)
+            }
+            plusDialogMethod?.addInstructions(0, "return-void")
+        } else {
+            val legacyMethod = StoriesReadReceiptFlowFingerprint.methodOrNull
+                ?: StoriesReadReceiptFlowLegacyFingerprint.methodOrNull
+            // Older builds retain their separately fingerprinted named helper.
+            legacyMethod?.addInstructions(
+                0,
+                """
+                    const/4 v0, 0x1
+                    return v0
+                """,
+            )
+        }
     }
 }

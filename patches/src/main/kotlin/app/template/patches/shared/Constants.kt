@@ -13,7 +13,11 @@ object Constants {
         packageName = "org.telegram.messenger",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.2.1", versionCode = 72911))
+        targets = listOf(
+            AppTarget(version = "13.2.2", versionCode = 73031),
+            // Previously audited legacy target; older named fingerprints remain available.
+            AppTarget(version = "13.1.1", versionCode = 72371),
+        )
     )
 
     val TELEGRAM_PLUS_COMPATIBILITY = Compatibility(
@@ -21,7 +25,11 @@ object Constants {
         packageName = "org.telegram.plus",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.1.1.1", versionCode = 22648))
+        targets = listOf(
+            AppTarget(version = "13.2.1.0", versionCode = 22678),
+            // Preserve the earlier Plus Messenger target and its independent legacy hooks.
+            AppTarget(version = "13.1.1.0", versionCode = 22621),
+        )
     )
 
     val TELEGRAM_WEB_COMPATIBILITY = Compatibility(
@@ -29,6 +37,10 @@ object Constants {
         packageName = "org.telegram.messenger.web",
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
-        targets = listOf(AppTarget(version = "13.2.1", versionCode = 72919))
+        targets = listOf(
+            AppTarget(version = "13.2.2", versionCode = 73039),
+            // Previously audited Web target; legacy fingerprints are retained separately.
+            AppTarget(version = "13.1.1", versionCode = 72379),
+        )
     )
 }

@@ -18,19 +18,25 @@ import android.widget.Toast;
 /**
  * Adds a Telegram Help-card-style Morphe section to the Settings screen.
  *
- * The public factory name and return type intentionally remain unchanged:
- * the existing Telegram 13.1.1 settings injection calls this method.
+ * The public factory name and return type intentionally remain unchanged so
+ * the bytecode injection can call this stable extension API.
  */
 public final class MorpheSettingsEntry {
     private static final int MORPHE_BLUE = 0xff079fc5;
 
     private MorpheSettingsEntry() { }
 
+    /** Legacy factory retained for earlier Telegram row-injection targets. */
     public static View createSettingsRow(Context context) {
+        return createSettingsRow(null, context);
+    }
+
+    /** Current R8 factory: prefer the host Settings Activity theme, fall back to app context. */
+    public static View createSettingsRow(Object parentFragment, Context fallbackContext) {
+        Context context = resolveHostContext(parentFragment, fallbackContext);
         if (context == null) {
-            throw new IllegalStateException("Telegram application context is not ready");
+            throw new IllegalStateException("Telegram Settings Activity and application context are unavailable");
         }
-        final Context appContext = context;
 
         // A single Help-style card. No separate Morphe heading above it.
         LinearLayout section = new LinearLayout(context);
@@ -79,7 +85,7 @@ public final class MorpheSettingsEntry {
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL));
-        title.setTextColor(0xff202124);
+        title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, Color.BLACK));
         labels.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -87,7 +93,7 @@ public final class MorpheSettingsEntry {
         subtitle.setText("Automatic forwarding and custom options");
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subtitle.setLineSpacing(0f, 1.0f);
-        subtitle.setTextColor(0xff555555);
+        subtitle.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleParams.topMargin = dp(context, 3);
@@ -96,7 +102,7 @@ public final class MorpheSettingsEntry {
         TextView chevron = new TextView(context);
         chevron.setText("›");
         chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        chevron.setTextColor(0xff555555);
+        chevron.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
         chevron.setGravity(Gravity.CENTER);
         item.addView(chevron, new LinearLayout.LayoutParams(
                 dp(context, 24), dp(context, 48)));
@@ -104,11 +110,13 @@ public final class MorpheSettingsEntry {
         item.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
                 try {
-                    Intent intent = new Intent(appContext, MorpheSettingsActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    appContext.startActivity(intent);
+                    Intent intent = new Intent(context, MorpheSettingsActivity.class);
+                    if (!(context instanceof android.app.Activity)) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    }
+                    context.startActivity(intent);
                 } catch (android.content.ActivityNotFoundException missingActivity) {
-                    Toast.makeText(appContext,
+                    Toast.makeText(context,
                             "Morphe Settings activity is not registered in this build",
                             Toast.LENGTH_LONG).show();
                 }
@@ -170,6 +178,17 @@ public final class MorpheSettingsEntry {
         }
     }
 
+    private static Context resolveHostContext(Object parentFragment, Context fallbackContext) {
+        if (parentFragment != null) {
+            try {
+                java.lang.reflect.Method getParentActivity = parentFragment.getClass().getMethod("getParentActivity");
+                Object activity = getParentActivity.invoke(parentFragment);
+                if (activity instanceof Context) return (Context) activity;
+            } catch (Throwable ignored) { }
+        }
+        return fallbackContext;
+    }
+
     private static int dp(Context context, float value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
@@ -189,10 +208,25 @@ public final class MorpheSettingsEntry {
         return fallback;
     }
 
+    private static boolean isColorDark(int color) {
+        double luminance = 0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color);
+        return luminance < 145.0;
+    }
+
+    private static int blend(int from, int to, float amount) {
+        float t = Math.max(0f, Math.min(1f, amount));
+        return Color.rgb(
+                Math.round(Color.red(from) * (1f - t) + Color.red(to) * t),
+                Math.round(Color.green(from) * (1f - t) + Color.green(to) * t),
+                Math.round(Color.blue(from) * (1f - t) + Color.blue(to) * t));
+    }
+
     private static android.graphics.drawable.Drawable createCardBackground(Context context) {
         // Match Telegram's Help card: white rounded surface on the Settings page background.
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(Color.WHITE);
+        int background = themeColor(context, android.R.attr.colorBackground, 0xfff1f1f3);
+        boolean dark = isColorDark(background);
+        shape.setColor(dark ? blend(background, Color.WHITE, 0.085f) : Color.WHITE);
         shape.setCornerRadius(dp(context, 24));
         return shape;
     }

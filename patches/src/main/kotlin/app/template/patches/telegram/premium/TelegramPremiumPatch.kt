@@ -12,9 +12,6 @@ import app.template.patches.telegram.SharedConfigGetDevicePerformanceClassFinger
 import app.template.patches.telegram.UserConfigGetMaxAccountCountFingerprint
 import app.template.patches.telegram.UserConfigHasPremiumOnAccountsFingerprint
 import app.template.patches.telegram.UserConfigIsPremiumFingerprint
-import app.template.patches.telegram.TelegramR8UserConfigIsPremiumFingerprint
-import app.template.patches.telegram.TelegramR8UserConfigHasPremiumOnAccountsFingerprint
-import app.template.patches.telegram.TelegramR8UserConfigGetMaxAccountCountFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsPremiumUserNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsPremiumUserWebFingerprint
 import app.template.patches.telegram.TelegramR8TranslationsManualNormalFingerprint
@@ -23,6 +20,9 @@ import app.template.patches.telegram.TelegramR8TranslationsAutoNormalFingerprint
 import app.template.patches.telegram.TelegramR8TranslationsAutoWebFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassNormalFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassWebFingerprint
+import app.template.patches.telegram.TelegramPlusR8UserConfigIsPremiumFingerprint
+import app.template.patches.telegram.TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint
+import app.template.patches.telegram.TelegramPlusR8UserConfigGetMaxAccountCountFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 @Suppress("unused")
@@ -30,10 +30,10 @@ val telegramPremiumPatch = bytecodePatch(
     name = "Unlock Premium",
     description = "Unlocks Telegram Premium features for the current account.",
 ) {
-    // DEX-verified against Telegram 13.1.1 build 72371, Telegram Web 13.1.1
-    // build 72379, and Plus Messenger 13.1.1.0 build 22621. Older
-    // target descriptors remain separately declared. The core premium
-    // and translation-gate methods below use identical descriptors in all three.
+    // DEX-verified against Telegram 13.2.2 build 73031, Telegram Web 13.2.2
+    // build 73039, and Plus Messenger 13.2.1.0 build 22678. Current Plus
+    // premium-account and max-account-count gates use separate R8 fingerprints;
+    // translation/device-class hooks remain target-specific and are not guessed.
     // Existing legacy targets are unchanged; only builds whose exact fingerprints resolve
     // are eligible, so this does not broaden support by guessing renamed methods.
     compatibleWith(
@@ -46,13 +46,24 @@ val telegramPremiumPatch = bytecodePatch(
 
     execute {
         val userConfigPremium =
-            TelegramR8UserConfigIsPremiumFingerprint.methodOrNull ?: UserConfigIsPremiumFingerprint.methodOrNull
-        requireNotNull(userConfigPremium) { "Missing UserConfig.isPremium()Z" }.addInstructions(
+            TelegramPlusR8UserConfigIsPremiumFingerprint.methodOrNull
+                ?: UserConfigIsPremiumFingerprint.methodOrNull
+        // In Telegram/Web 13.2.2 R8, the historical UserConfig.isPremium()
+        // helper is inlined and the old c20 alias is not a UserConfig class.
+        // Patch it only on Plus/legacy where it actually resolves; the current
+        // Telegram/Web per-user entitlement gate below is the verified core gate.
+        userConfigPremium?.addInstructions(
             0, """
                 const/4 v0, 0x1
                 return v0
             """,
         )
+
+        requireNotNull(
+            TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
+                ?: TelegramR8MessagesControllerIsPremiumUserWebFingerprint.methodOrNull
+                ?: MessagesControllerIsPremiumUserFingerprint.methodOrNull,
+        ) { "Missing verified per-user Premium gate" }
 
         val premiumUserMethod =
             TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
@@ -82,7 +93,7 @@ val telegramPremiumPatch = bytecodePatch(
         """)
 
         val hasPremiumOnAccounts =
-            TelegramR8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
+            TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
                 ?: UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
         hasPremiumOnAccounts?.addInstructions(0, """
             const/4 v0, 0x1
@@ -90,7 +101,7 @@ val telegramPremiumPatch = bytecodePatch(
         """)
 
         val maxAccountCount =
-            TelegramR8UserConfigGetMaxAccountCountFingerprint.methodOrNull
+            TelegramPlusR8UserConfigGetMaxAccountCountFingerprint.methodOrNull
                 ?: UserConfigGetMaxAccountCountFingerprint.methodOrNull
         maxAccountCount?.addInstructions(0, """
             const/16 v0, 0x3E7

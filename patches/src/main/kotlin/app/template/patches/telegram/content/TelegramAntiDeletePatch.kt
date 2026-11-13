@@ -19,6 +19,7 @@ import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFin
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
+import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -85,7 +86,7 @@ private val deletedMessageUiLegacyFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramAntiDeletePatch = bytecodePatch(
     name = "Anti-delete messages",
-    description = "Prevents messages deleted by other users from being removed locally.",
+    description = "Ignores incoming remote deletion updates while leaving the local delete action path intact.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -98,13 +99,23 @@ val telegramAntiDeletePatch = bytecodePatch(
         val currentR8UpdateMethod =
             TelegramR8ProcessUpdateArrayNormalFingerprint.methodOrNull
                 ?: TelegramR8ProcessUpdateArrayWebFingerprint.methodOrNull
+                ?: TelegramPlusR8ProcessUpdateArrayFingerprint.methodOrNull
 
         if (currentR8UpdateMethod != null) {
-            // In Telegram/Web 13.2.1, the old deleteMessagesByPush entry point is
-            // folded into MessagesController.N3. Do not suppress the whole update
+            // In Telegram/Web 13.2.2 (Android build 73031 / Web build 73039), and Plus 13.2.1.0 build 22678,
+            // the old deleteMessagesByPush entry point is folded into the independently fingerprinted update-array
+            // dispatcher (N3 for Telegram/Web; Bh for Plus). Do not suppress the whole update
             // (which would stall pts); suppress only the two message-id list appends
             // for TL_updateDeleteMessages and TL_updateDeleteChannelMessages.
             // Scheduled, ephemeral and group-call delete updates remain untouched.
+            // Locally initiated deletion uses separate callbacks: Android/Web
+            // MessagesController wp/sp.b0 -> MessagesStorage is/ds.P0; Plus
+            // MessagesController ko0.ob -> MessagesStorage vz0.K7. This hook only
+            // removes remote update IDs from N3/Bh and does not patch those callbacks.
+            // A deletion initiated on another device for an
+            // outgoing message is not distinguishable from a peer deletion in the
+            // TL_updateDelete* payload (IDs only), so author-aware filtering for that
+            // cross-device case is deliberately not claimed.
             val instructions = requireNotNull(currentR8UpdateMethod.implementation) {
                 "R8 MessagesController update-array method has no implementation"
             }.instructions.toList()
@@ -123,6 +134,20 @@ val telegramAntiDeletePatch = bytecodePatch(
             }
             require(deleteAppendIndexes.size == 2) {
                 "Expected exactly two remote-delete list appends in R8 update processing, found ${deleteAppendIndexes.size}"
+            }
+            // The addAll return value is intentionally unused in all three audited DEXes.
+            // Replacing only the invoke with NOP is verifier-safe only while no move-result
+            // immediately follows it. Guard this invariant so a future Telegram/Plus build
+            // cannot silently produce invalid bytecode if the compiler starts consuming it.
+            val moveResultOpcodes = setOf(
+                Opcode.MOVE_RESULT,
+                Opcode.MOVE_RESULT_OBJECT,
+                Opcode.MOVE_RESULT_WIDE,
+            )
+            require(deleteAppendIndexes.all { index ->
+                instructions.getOrNull(index + 1)?.opcode !in moveResultOpcodes
+            }) {
+                "Remote-delete addAll result is consumed; refusing unsafe single-instruction NOP replacement"
             }
             deleteAppendIndexes.sortedDescending().forEach { index ->
                 currentR8UpdateMethod.replaceInstruction(index, "nop")

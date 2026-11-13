@@ -7,19 +7,12 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.TelegramR8MorpheSettingsRowsNormalFingerprint
+import app.template.patches.telegram.TelegramR8MorpheSettingsRowsWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
 import org.w3c.dom.Element
 
-// Current 13.2.1 row builders, independently resolved for Android and Web.
-private val telegramSettingsRowsCurrentFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/c51;", name = "e0", returnType = "V",
-    parameters = listOf("Lorg/telegram/ui/c51;", "Ljava/util/ArrayList;"),
-)
-private val telegramWebSettingsRowsCurrentFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/h51;", name = "f0", returnType = "V",
-    parameters = listOf("Lorg/telegram/ui/h51;", "Ljava/util/ArrayList;"),
-)
 // Preserve historical fingerprints as an independent fallback.
 private val telegramSettingsRowsLegacyFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/p91;", name = "b0", returnType = "V",
@@ -73,14 +66,17 @@ private val morpheSettingsActivityManifestPatch = resourcePatch(
 }
 
 private fun settingsRowInstructions(componentClass: String, factoryMethod: String, contextField: String): String = """
+    # v0 is reused by Telegram's builder and can contain a TextView at its
+    # normal exit. Restore the original fragment from p0 before resolving its Activity.
+    move-object/from16 v0, p0
     sget-object v4, $contextField:Landroid/content/Context;
-    invoke-static {v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Landroid/content/Context;)Landroid/view/View;
+    invoke-static {v0, v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Ljava/lang/Object;Landroid/content/Context;)Landroid/view/View;
     move-result-object v0
     invoke-static {v0}, Lorg/telegram/ui/Components/$componentClass;->$factoryMethod(Landroid/view/View;)Lorg/telegram/ui/Components/$componentClass;
     move-result-object v2
     # v1 is the low-register alias of the ArrayList parameter (p1), copied
-    # at the beginning of this static builder. Use v1 because p1 maps to v23
-    # in this 24-register method and cannot be encoded in invoke-virtual's 35c form.
+    # at the beginning of this static builder. Both verified methods keep v1
+    # below the 35c invoke register limit (26 Android / 24 Web registers).
     invoke-virtual {v1, v2}, Ljava/util/ArrayList;->add(Ljava/lang/Object;)Z
 """.trimIndent()
 
@@ -112,8 +108,10 @@ fun patchSettingsBuilder(
     contextField: String,
     minRegisters: Int,
 ) {
+    var targetFound = false
     classDefForEach { classDef ->
         if (classDef.type != targetClass) return@classDefForEach
+        targetFound = true
 
         val mutableMethod = mutableClassDefBy(classDef).methods.firstOrNull { method ->
             method.name == targetMethod &&
@@ -138,20 +136,25 @@ fun patchSettingsBuilder(
             mutableMethod.addInstructions(index, instructions)
         }
     }
+    require(targetFound) { "Could not find Settings builder class $targetClass in the target APK" }
 }
 
 
-        val currentAndroid = telegramSettingsRowsCurrentFingerprint.methodOrNull
-        val currentWeb = telegramWebSettingsRowsCurrentFingerprint.methodOrNull
+        val currentAndroid = TelegramR8MorpheSettingsRowsNormalFingerprint.methodOrNull
+        val currentWeb = TelegramR8MorpheSettingsRowsWebFingerprint.methodOrNull
         val legacyAndroid = telegramSettingsRowsLegacyFingerprint.methodOrNull
         val legacyWeb = telegramWebSettingsRowsLegacyFingerprint.methodOrNull
 
+        require(listOf(currentAndroid, currentWeb, legacyAndroid, legacyWeb).count { it != null } == 1) {
+            "Could not uniquely resolve the Telegram Android/Web Morphe Settings row builder"
+        }
+
         when {
-            currentAndroid != null && currentWeb == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/c51;", "e0", "t41", "m", "Lorg/telegram/messenger/u0;->b", 26,
+            currentAndroid != null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/d51;", "e0", "v41", "m", "Lorg/telegram/messenger/u0;->b", 26,
             )
-            currentWeb != null && currentAndroid == null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/h51;", "f0", "m41", "m", "Lorg/telegram/messenger/t0;->b", 24,
+            currentWeb != null -> patchSettingsBuilder(
+                "Lorg/telegram/ui/i51;", "f0", "n41", "m", "Lorg/telegram/messenger/t0;->b", 24,
             )
             currentAndroid == null && currentWeb == null && legacyAndroid != null && legacyWeb == null -> patchSettingsBuilder(
                 "Lorg/telegram/ui/p91;", "b0", "r71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
@@ -179,8 +182,10 @@ fun patchSettingsBuilder(
             else -> "Lorg/telegram/messenger/ApplicationLoader;"
         }
         val startupName = if (currentAndroid != null || currentWeb != null) "onCreate" else "postInitApplication"
+        var startupFound = false
         classDefForEach { classDef ->
             if (classDef.type != startupClass) return@classDefForEach
+            startupFound = true
             val startupMethod = mutableClassDefBy(classDef).methods.firstOrNull {
                 it.name == startupName && it.parameterTypes.isEmpty() && it.returnType == "V"
             } ?: error("Could not resolve editable startup method $startupClass->$startupName()V")
@@ -190,8 +195,18 @@ fun patchSettingsBuilder(
             val startupReturnIndexes = startupInstructions.mapIndexedNotNull { index, instruction ->
                 index.takeIf { instruction.opcode == Opcode.RETURN_VOID }
             }
-            require(startupReturnIndexes.size == 1) {
-                "Unexpected startup control flow: expected 1 RETURN_VOID site, found ${startupReturnIndexes.size}"
+            val startupReturnIndex = if (currentAndroid != null || currentWeb != null) {
+                require(startupReturnIndexes.size == 2) {
+                    "Unexpected current-R8 startup control flow: expected widget early-return plus normal RETURN_VOID, found ${startupReturnIndexes.size}"
+                }
+                // Current R8 Android/Web Application.onCreate have an early exit
+                // followed by the normal app-start return. Inject only on normal startup.
+                startupReturnIndexes.last()
+            } else {
+                require(startupReturnIndexes.size == 1) {
+                    "Unexpected legacy ApplicationLoader.postInitApplication control flow: expected one RETURN_VOID, found ${startupReturnIndexes.size}"
+                }
+                startupReturnIndexes.single()
             }
             val runtimeInstallInstructions = when {
                 currentAndroid != null -> """
@@ -204,9 +219,10 @@ fun patchSettingsBuilder(
                 """.trimIndent()
                 else -> "invoke-static {}, Lapp/template/extension/telegram/MorpheForwardingRuntime;->install()V"
             }
-            // Insert immediately before the actual normal return, never before the
-            // final instruction blindly: obfuscated methods can end in a throw path.
-            startupMethod.addInstructions(startupReturnIndexes.single(), runtimeInstallInstructions)
+            // Insert at the validated normal return selected above, never at the
+            // final instruction blindly: current-R8 methods have a throw handler.
+            startupMethod.addInstructions(startupReturnIndex, runtimeInstallInstructions)
         }
+        require(startupFound) { "Could not find Telegram Application startup class $startupClass" }
     }
 }

@@ -21,27 +21,33 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Connects Morphe forwarding rules to Telegram's already-authenticated account stack.
- * Current Telegram 13.2.1 Android/Web R8 names are selected by the patch's startup hook.
+ * Current Telegram 13.2.2 Android/Web R8 names are selected by the patch's startup hook.
  * The no-argument entry point is retained for older, unobfuscated targets.
  */
 public final class MorpheForwardingRuntime {
     private static final int PROFILE_UNSET = -2;
     private static final int PROFILE_LEGACY = -1;
-    private static final int PROFILE_TELEGRAM_ANDROID_1321 = 0;
-    private static final int PROFILE_TELEGRAM_WEB_1321 = 1;
+    private static final int PROFILE_TELEGRAM_ANDROID_1322 = 0;
+    private static final int PROFILE_TELEGRAM_WEB_1322 = 1;
 
     private static final ArrayList<Object> OBSERVERS = new ArrayList<>();
     private static final Set<Integer> REGISTERED_ACCOUNTS = new HashSet<>();
     private static volatile boolean installed;
     private static int activeProfile = PROFILE_UNSET;
     private static int installRetryCount;
+    private static volatile String lastAccountRegistrationError = "";
     private static final int MAX_INSTALL_RETRIES = 20;
-    private static ForwardingCoordinator coordinator;
-    private static SharedPreferencesForwardingRuleStore store;
+    private static volatile ForwardingCoordinator coordinator;
+    private static volatile SharedPreferencesForwardingRuleStore store;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final AtomicBoolean FIRST_INCOMING_REPORTED = new AtomicBoolean(false);
+    private static final AtomicBoolean PAYLOAD_ERROR_REPORTED = new AtomicBoolean(false);
+    private static final AtomicBoolean MESSAGE_ADAPTER_ERROR_REPORTED = new AtomicBoolean(false);
+    private static final AtomicBoolean SECRET_FILTER_ERROR_REPORTED = new AtomicBoolean(false);
 
     private MorpheForwardingRuntime() { }
 
@@ -50,9 +56,9 @@ public final class MorpheForwardingRuntime {
         installInternal(PROFILE_LEGACY);
     }
 
-    /** Called by the 13.2.1 Telegram Android/Web patch with its exact R8 profile. */
+    /** Called by the 13.2.2 Telegram Android/Web patch with its exact R8 profile. */
     public static synchronized void install(int profile) {
-        if (profile != PROFILE_TELEGRAM_ANDROID_1321 && profile != PROFILE_TELEGRAM_WEB_1321) {
+        if (profile != PROFILE_TELEGRAM_ANDROID_1322 && profile != PROFILE_TELEGRAM_WEB_1322) {
             installInternal(PROFILE_LEGACY);
             return;
         }
@@ -70,10 +76,14 @@ public final class MorpheForwardingRuntime {
         try {
             Context context = applicationContext(profile);
             if (context == null) {
+                updateRuntimeStatus("Waiting for Telegram application context");
                 scheduleInstallRetry(profile);
                 return;
             }
+            MorpheRulesBackup.schedule(context);
             if (store == null) store = new SharedPreferencesForwardingRuleStore(context);
+            updateRuntimeStatus("Registering Telegram message listener");
+            MorpheStatusNotification.update(context, store.isEnabled());
             if (coordinator == null) {
                 Executor executor = Executors.newSingleThreadExecutor(command -> {
                     Thread thread = new Thread(command, "MorpheForwarding");
@@ -103,14 +113,27 @@ public final class MorpheForwardingRuntime {
                     REGISTERED_ACCOUNTS.add(account);
                 } catch (Throwable accountError) {
                     // Keep successful account registrations and retry missing slots only.
+                    // Surface the failure class: otherwise a broken account slot looks like
+                    // a healthy listener with fewer accounts and is impossible to diagnose
+                    // without ADB/logcat.
+                    lastAccountRegistrationError = unwrap(accountError).getClass().getSimpleName();
                 }
             }
             installed = REGISTERED_ACCOUNTS.size() >= maxAccounts;
-            if (!installed) scheduleInstallRetry(profile);
-            else installRetryCount = 0;
+            if (!installed) {
+                String status = "Listener partially registered: " + REGISTERED_ACCOUNTS.size() + "/" + maxAccounts + " accounts";
+                if (!lastAccountRegistrationError.isEmpty()) status += "; last error: " + lastAccountRegistrationError;
+                updateRuntimeStatus(status);
+                scheduleInstallRetry(profile);
+            } else {
+                installRetryCount = 0;
+                lastAccountRegistrationError = "";
+                updateRuntimeStatus("Ready — listening on " + REGISTERED_ACCOUNTS.size() + " Telegram accounts");
+            }
         } catch (Throwable error) {
             // A version mismatch must never be allowed to interrupt Telegram startup.
             installed = false;
+            updateRuntimeStatus("Listener setup failed: " + unwrap(error).getClass().getSimpleName());
             scheduleInstallRetry(profile);
         }
     }
@@ -121,6 +144,11 @@ public final class MorpheForwardingRuntime {
         MAIN.postDelayed(new Runnable() {
             @Override public void run() { MorpheForwardingRuntime.installInternal(profile); }
         }, 15000L);
+    }
+
+    private static void updateRuntimeStatus(String status) {
+        SharedPreferencesForwardingRuleStore current = store;
+        if (current != null) current.setRuntimeStatus(status);
     }
 
     private static Context applicationContext(int profile) {
@@ -138,9 +166,12 @@ public final class MorpheForwardingRuntime {
             Class<?> type = Class.forName(mapping.dialogIdClass, false, loader);
             Method method = type.getMethod(mapping.dialogIdMethod, long.class);
             return Boolean.TRUE.equals(method.invoke(null, dialogId));
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
             // Fail closed: if this client variant's secret-chat predicate cannot be resolved,
-            // do not pass the message to the automation engine.
+            // do not pass the message to the automation engine. Surface the reason in Settings.
+            if (SECRET_FILTER_ERROR_REPORTED.compareAndSet(false, true)) {
+                updateRuntimeStatus("Safety filter unavailable; automation paused: " + unwrap(error).getClass().getSimpleName());
+            }
             return true;
         }
     }
@@ -165,20 +196,61 @@ public final class MorpheForwardingRuntime {
                 int id = ((Number) args[0]).intValue();
                 if (id != eventId || !(args[2] instanceof Object[])) return null;
                 Object[] payload = (Object[]) args[2];
-                if (payload.length < 2 || !(payload[0] instanceof Number) || !(payload[1] instanceof List)) return null;
+                if (payload.length < 2 || !(payload[0] instanceof Number)) {
+                    if (PAYLOAD_ERROR_REPORTED.compareAndSet(false, true)) {
+                        updateRuntimeStatus("Listener active but Telegram message payload was unexpected");
+                    }
+                    return null;
+                }
+                // NotificationCenter event 1 normally carries
+                // [dialogId, ArrayList<MessageObject>, scheduled, ...]. Accept a single
+                // MessageObject as well: some Telegram update paths emit one object rather
+                // than a grouped list. Scheduled updates are deliberately not automated.
                 if (payload.length > 2 && Boolean.TRUE.equals(payload[2])) return null;
                 long dialogId = ((Number) payload[0]).longValue();
-                List<?> messages = (List<?>) payload[1];
+                List<?> messages;
+                if (payload[1] instanceof List) {
+                    messages = (List<?>) payload[1];
+                } else if (isNativeMessageObject(payload[1], mapping)) {
+                    messages = Collections.singletonList(payload[1]);
+                } else {
+                    if (PAYLOAD_ERROR_REPORTED.compareAndSet(false, true)) {
+                        updateRuntimeStatus("Listener active but Telegram message object was unexpected");
+                    }
+                    return null;
+                }
                 if (messages.isEmpty()) return null;
-                ClassLoader loader = messages.get(0).getClass().getClassLoader();
+                Object firstMessage = null;
+                for (Object candidate : messages) if (candidate != null) { firstMessage = candidate; break; }
+                if (firstMessage == null) return null;
+                ClassLoader loader = firstMessage.getClass().getClassLoader();
                 if (isSecretDialog(dialogId, mapping, loader)) return null;
+                int converted = 0;
                 for (Object nativeMessage : messages) {
                     ForwardingMessage message = toForwardingMessage(accountId, dialogId, nativeMessage, mapping);
-                    if (message != null && coordinator != null) coordinator.onIncomingMessage(message);
+                    if (message != null) {
+                        converted++;
+                        if (coordinator != null) coordinator.onIncomingMessage(message);
+                    }
                 }
-            } catch (Throwable ignored) { }
+                if (converted > 0 && FIRST_INCOMING_REPORTED.compareAndSet(false, true)) {
+                    updateRuntimeStatus("Listener active — Telegram incoming messages detected");
+                }
+            } catch (Throwable error) {
+                if (PAYLOAD_ERROR_REPORTED.compareAndSet(false, true)) {
+                    updateRuntimeStatus("Listener update failed: " + unwrap(error).getClass().getSimpleName());
+                }
+            }
             return null;
         }
+    }
+
+    private static boolean isNativeMessageObject(Object value, RuntimeProfile mapping) {
+        if (value == null) return false;
+        try {
+            value.getClass().getField(mapping.messageOwnerField);
+            return true;
+        } catch (Throwable ignored) { return false; }
     }
 
     private static ForwardingMessage toForwardingMessage(int accountId, long dialogId,
@@ -206,11 +278,66 @@ public final class MorpheForwardingRuntime {
                 Object raw = ownerType.getField("message").get(owner);
                 if (raw != null) text = String.valueOf(raw);
             }
-            // A protected message may still enter COPY mode when the user's separate
-            // content-restriction patch allows copying. FORWARD is always rejected.
+            // FORWARD follows Telegram's own eligibility predicate. COPY remains a
+            // separate text-resend operation and does not claim to be a native forward.
+            boolean canForward = false;
+            try {
+                canForward = Boolean.TRUE.equals(messageType.getMethod(mapping.messageCanForwardMethod).invoke(messageObject));
+            } catch (Throwable ignored) { /* fail closed for forward mode */ }
+            boolean stickerOrEmojiOnly = (isStickerMessage(owner) && text.trim().isEmpty())
+                    || (!text.trim().isEmpty() && isEmojiOnlyText(text) && !hasMedia(owner));
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, protectedContent, !protectedContent, messageObject);
-        } catch (Throwable ignored) { return null; }
+                    false, false, false, protectedContent, canForward && !protectedContent,
+                    messageObject, stickerOrEmojiOnly);
+        } catch (Throwable error) {
+            if (MESSAGE_ADAPTER_ERROR_REPORTED.compareAndSet(false, true)) {
+                updateRuntimeStatus("Message adapter failed: " + unwrap(error).getClass().getSimpleName());
+            }
+            return null;
+        }
+    }
+
+
+    private static boolean isStickerMessage(Object owner) {
+        try {
+            Field mediaField = findField(owner.getClass(), "media");
+            if (mediaField == null) return false;
+            mediaField.setAccessible(true);
+            Object media = mediaField.get(owner);
+            if (media == null) return false;
+            if (media.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")) return true;
+            Field documentField = findField(media.getClass(), "document");
+            if (documentField == null) return false;
+            documentField.setAccessible(true);
+            Object document = documentField.get(media);
+            if (document == null) return false;
+            Field attributesField = findField(document.getClass(), "attributes");
+            if (attributesField == null) return false;
+            attributesField.setAccessible(true);
+            Object attributes = attributesField.get(document);
+            if (!(attributes instanceof Iterable)) return false;
+            for (Object attribute : (Iterable<?>) attributes) {
+                if (attribute != null && (attribute.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")
+                        || findField(attribute.getClass(), "stickerset") != null)) return true;
+            }
+        } catch (Throwable ignored) { }
+        return false;
+    }
+
+    private static boolean hasMedia(Object owner) {
+        try { Field f = findField(owner.getClass(), "media"); if (f == null) return false; f.setAccessible(true); return f.get(owner) != null; }
+        catch (Throwable ignored) { return false; }
+    }
+
+    private static boolean isEmojiOnlyText(String value) {
+        return MorpheMessageContentFilter.isEmojiOnlyText(value);
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            try { return c.getDeclaredField(name); } catch (Throwable ignored) { }
+        }
+        return null;
     }
 
     private static final class NativeGateway implements TelegramMessageGateway {
@@ -236,8 +363,9 @@ public final class MorpheForwardingRuntime {
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
                         method.invoke(helper, messages, destinationChatId,
                                 !showSenderName, false, false, 0, 0, null, -1, 0L, 0L, null);
-                        if (callback != null) callback.onSuccess();
+                        if (callback != null) callback.onQueued();
                     } catch (Throwable error) {
+                        updateRuntimeStatus("Forward request failed: " + unwrap(error).getClass().getSimpleName());
                         if (callback != null) callback.onFailure(unwrap(error));
                     }
                 }
@@ -255,7 +383,7 @@ public final class MorpheForwardingRuntime {
                         if (source.getText().trim().isEmpty()) throw new IllegalArgumentException("Only text messages can be copied");
                         ClassLoader loader = nativeMessage.getClass().getClassLoader();
                         if (mapping.currentR8) {
-                            // Current 13.2.1 clients expose the native text-send path as
+                            // Current 13.2.2 clients expose the native text-send path as
                             // SendMessagesHelper.a0(AccountInstance, CharSequence, topicId,
                             // dialogId, ..., flags). It converts Telegram spans to entities
                             // before enqueueing, preserving rich text and embedded links.
@@ -284,8 +412,9 @@ public final class MorpheForwardingRuntime {
                             Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                             helperClass.getMethod("sendMessage", paramsClass).invoke(helper, params);
                         }
-                        if (callback != null) callback.onSuccess();
+                        if (callback != null) callback.onQueued();
                     } catch (Throwable error) {
+                        updateRuntimeStatus("Copy request failed: " + unwrap(error).getClass().getSimpleName());
                         if (callback != null) callback.onFailure(unwrap(error));
                     }
                 }
@@ -334,15 +463,15 @@ public final class MorpheForwardingRuntime {
         final String applicationClass, applicationContextField;
         final String notificationClass, delegateClass, notificationGetInstance, notificationAddObserver;
         final int eventId, maxAccounts;
-        final String messageOwnerField, messageTextField, dialogIdClass, dialogIdMethod;
+        final String messageOwnerField, messageTextField, messageCanForwardMethod, dialogIdClass, dialogIdMethod;
         final String sendHelperClass, sendHelperInstance, forwardMethod, suggestionParamsClass;
         final String accountInstanceClass, accountInstanceFactory, copyMethod, sendParamsClass;
 
         RuntimeProfile(boolean currentR8, String applicationClass, String applicationContextField,
                        String notificationClass, String delegateClass, String notificationGetInstance,
                        String notificationAddObserver, int eventId, int maxAccounts,
-                       String messageOwnerField, String messageTextField, String dialogIdClass,
-                       String dialogIdMethod, String sendHelperClass,
+                       String messageOwnerField, String messageTextField, String messageCanForwardMethod,
+                       String dialogIdClass, String dialogIdMethod, String sendHelperClass,
                        String sendHelperInstance, String forwardMethod, String suggestionParamsClass,
                        String accountInstanceClass, String accountInstanceFactory, String copyMethod,
                        String sendParamsClass) {
@@ -357,6 +486,7 @@ public final class MorpheForwardingRuntime {
             this.maxAccounts = maxAccounts;
             this.messageOwnerField = messageOwnerField;
             this.messageTextField = messageTextField;
+            this.messageCanForwardMethod = messageCanForwardMethod;
             this.dialogIdClass = dialogIdClass;
             this.dialogIdMethod = dialogIdMethod;
             this.sendHelperClass = sendHelperClass;
@@ -370,21 +500,21 @@ public final class MorpheForwardingRuntime {
         }
 
         static RuntimeProfile forId(int id) {
-            if (id == PROFILE_TELEGRAM_ANDROID_1321) return new RuntimeProfile(true,
-                    "org.telegram.messenger.u0", "b", "org.telegram.messenger.ys",
-                    "org.telegram.messenger.ts", "f", "b", 1, 4, "k", "v",
-                    "org.telegram.messenger.i5", "C", "org.telegram.messenger.qz", "C", "q0", "org.telegram.messenger.qj",
+            if (id == PROFILE_TELEGRAM_ANDROID_1322) return new RuntimeProfile(true,
+                    "org.telegram.messenger.u0", "b", "org.telegram.messenger.zs",
+                    "org.telegram.messenger.us", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.rj",
                     "org.telegram.messenger.a", "a", "a0", null);
-            if (id == PROFILE_TELEGRAM_WEB_1321) return new RuntimeProfile(true,
-                    "org.telegram.messenger.t0", "b", "org.telegram.messenger.us",
-                    "org.telegram.messenger.ps", "f", "b", 1, 4, "k", "v",
-                    "org.telegram.messenger.h5", "C", "org.telegram.messenger.pz", "C", "q0", "org.telegram.messenger.lj",
+            if (id == PROFILE_TELEGRAM_WEB_1322) return new RuntimeProfile(true,
+                    "org.telegram.messenger.t0", "b", "org.telegram.messenger.vs",
+                    "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.h5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.mj",
                     "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
                     "org.telegram.messenger.ApplicationLoader", "applicationContext",
                     "org.telegram.messenger.NotificationCenter",
                     "org.telegram.messenger.NotificationCenter$NotificationCenterDelegate",
-                    "getInstance", "addObserver", 1, 4, "messageOwner", "messageText",
+                    "getInstance", "addObserver", 1, 4, "messageOwner", "messageText", "canForwardMessage",
                     "org.telegram.messenger.DialogObject", "isEncryptedDialog",
                     "org.telegram.messenger.SendMessagesHelper", "getInstance", "sendMessage", "",
                     "", "", "", "org.telegram.messenger.SendMessagesHelper$SendMessageParams");

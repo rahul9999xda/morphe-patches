@@ -46,6 +46,9 @@ public final class ForwardingCoordinator {
                     try { rules = store.loadRules(); }
                     catch (Throwable ignored) { return; }
                     if (rules == null) return;
+                    if (message.isStickerOrEmojiOnly()
+                            && store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore
+                            && ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).isIgnoreStickerEmojiOnly()) return;
                     for (ForwardingRule rule : rules) {
                         if (!running) return;
                         if (rule == null) continue;
@@ -87,8 +90,24 @@ public final class ForwardingCoordinator {
             }
         }
 
+        final AtomicBoolean queued = new AtomicBoolean(false);
         final AtomicBoolean completed = new AtomicBoolean(false);
         TelegramMessageGateway.ResultCallback callback = new TelegramMessageGateway.ResultCallback() {
+            @Override public void onQueued() {
+                if (!queued.compareAndSet(false, true)) return;
+                // This is a local Telegram queue acceptance, not a server delivery ACK.
+                // Keep a distinct metric so the settings screen never overstates delivery.
+                if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
+                    if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                        try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordCopyQueued(rule.getId()); }
+                        catch (Throwable ignored) { }
+                    }
+                } else if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                    try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordForwardQueued(rule.getId()); }
+                    catch (Throwable ignored) { }
+                }
+                inFlight.remove(key);
+            }
             @Override public void onSuccess() {
                 if (!completed.compareAndSet(false, true)) return;
                 inFlight.remove(key);

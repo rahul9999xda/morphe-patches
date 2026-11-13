@@ -12,6 +12,8 @@ import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredNormalFin
 import app.template.patches.telegram.TelegramR8MessageObjectIsSponsoredWebFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint
+import app.template.patches.telegram.TelegramPlusR8GetSponsoredMessagesFingerprint
+import app.template.patches.telegram.TelegramPlusR8IsSponsoredDisabledFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val messageObjectIsSponsoredFingerprint = Fingerprint(
@@ -57,15 +59,27 @@ val telegramRemoveAdsPatch = bytecodePatch(
                 ?: TelegramR8MessageObjectIsSponsoredWebFingerprint.methodOrNull
         val sponsoredMethod = currentMessageObjectMethod
             ?: messageObjectIsSponsoredFingerprint.methodOrNull
-        requireNotNull(sponsoredMethod) { "Missing MessageObject.isSponsored()Z" }
-        sponsoredMethod.addInstructions(0, """
-            const/4 v0, 0x0
-            return v0
-        """)
+        if (sponsoredMethod != null) {
+            sponsoredMethod.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
+        } else {
+            // Plus Messenger has no standalone MessageObject.isSponsored() method.
+            // Its controller owns the sponsored-message cache/request path instead.
+            val plusSponsoredLoader = TelegramPlusR8GetSponsoredMessagesFingerprint.methodOrNull
+            requireNotNull(plusSponsoredLoader) {
+                "Missing sponsored-message classifier or audited Plus sponsored loader"
+            }.addInstructions(0, """
+                const/4 v0, 0x0
+                return-object v0
+            """)
+        }
 
         val currentControllerMethod =
             TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint.methodOrNull
+                ?: TelegramPlusR8IsSponsoredDisabledFingerprint.methodOrNull
         (currentControllerMethod ?: messagesControllerIsSponsoredDisabledFingerprint.methodOrNull)
             ?.addInstructions(0, """
                 const/4 v0, 0x1
@@ -81,7 +95,7 @@ val telegramRemoveAdsPatch = bytecodePatch(
 
         videoAdsLoadFingerprint.methodOrNull?.addInstructions(0, "return-void")
 
-        // Plus Messenger 13.1.1.0 declares loadAds(Activity, Cells.m3)V.
+        // Plus Messenger's current R8 controller also owns the sponsored-message request cache.
         // Keep the historical no-argument signature as a separate fallback for older Plus builds.
         listOf(
             PlusApplicationLoaderLoadAdsFingerprint.methodOrNull,
