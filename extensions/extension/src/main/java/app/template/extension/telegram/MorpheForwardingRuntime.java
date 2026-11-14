@@ -86,18 +86,14 @@ public final class MorpheForwardingRuntime {
             if (store == null) store = new SharedPreferencesForwardingRuleStore(context);
             updateRuntimeStatus("Registering Telegram message listener");
             if (coordinator == null) {
-                // One worker preserves message/rule order. A bounded queue prevents an
-                // extended offline burst from consuming unbounded memory; rejection is
-                // surfaced by ForwardingCoordinator instead of silently dropping work.
-                ThreadPoolExecutor executor = new ThreadPoolExecutor(
-                        1, 1, 0L, TimeUnit.MILLISECONDS,
-                        new ArrayBlockingQueue<Runnable>(256),
-                        command -> {
-                            Thread thread = new Thread(command, "MorpheForwarding");
-                            thread.setPriority(Thread.NORM_PRIORITY - 1);
-                            return thread;
-                        }, new ThreadPoolExecutor.AbortPolicy());
-                coordinator = new ForwardingCoordinator(store, new NativeGateway(profile), executor);
+                // Keep event matching ordered, but isolate the two delivery modes. A slow
+                // FORWARD operation must not stall COPY rules and vice versa. Every queue is
+                // bounded; rejected work is counted by the coordinator instead of disappearing.
+                ThreadPoolExecutor eventExecutor = createQueue("MorpheEvents", 256);
+                ThreadPoolExecutor forwardExecutor = createQueue("MorpheForward", 128);
+                ThreadPoolExecutor copyExecutor = createQueue("MorpheCopy", 128);
+                coordinator = new ForwardingCoordinator(store, new NativeGateway(profile),
+                        eventExecutor, forwardExecutor, copyExecutor);
                 coordinator.start();
             }
 
@@ -143,6 +139,15 @@ public final class MorpheForwardingRuntime {
             updateRuntimeStatus("Listener setup failed: " + unwrap(error).getClass().getSimpleName());
             scheduleInstallRetry(profile);
         }
+    }
+
+    private static ThreadPoolExecutor createQueue(final String name, int capacity) {
+        return new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<Runnable>(capacity), command -> {
+                    Thread thread = new Thread(command, name);
+                    thread.setPriority(Thread.NORM_PRIORITY - 1);
+                    return thread;
+                }, new ThreadPoolExecutor.AbortPolicy());
     }
 
     private static void scheduleInstallRetry(final int profile) {
@@ -372,8 +377,15 @@ public final class MorpheForwardingRuntime {
                                 ? currentForwardMethod(helperClass, nativeMessage.getClass(), mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
-                        method.invoke(helper, messages, destinationChatId,
+                        Object sendResult = method.invoke(helper, messages, destinationChatId,
                                 !showSenderName, false, false, 0, 0, null, -1, 0L, 0L, null);
+                        // Current R8 SendMessagesHelper.q0 returns the local send/message
+                        // identifier, with 0 meaning that no request was queued. Treating
+                        // every void-free reflection call as success hid rejected channel
+                        // forwards and kept the Failed counter at zero.
+                        if (sendResult instanceof Number && ((Number) sendResult).intValue() == 0) {
+                            throw new IllegalStateException("Telegram declined the native forward request");
+                        }
                         if (callback != null) callback.onQueued();
                     } catch (Throwable error) {
                         updateRuntimeStatus("Forward request failed: " + unwrap(error).getClass().getSimpleName());

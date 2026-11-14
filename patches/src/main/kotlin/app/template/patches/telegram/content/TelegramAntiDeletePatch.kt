@@ -23,6 +23,7 @@ import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -165,6 +166,18 @@ val telegramAntiDeletePatch = bytecodePatch(
                 "Lorg/telegram/messenger/ko0;" -> "Lu/k;"
                 else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
             }
+            var mapRemoveMethodFound = false
+            classDefForEach { classDef ->
+                if (classDef.type == expectedMapClass) {
+                    mapRemoveMethodFound = classDef.methods.any { method ->
+                        method.name == "l" && method.parameterTypes.map { it.toString() } == listOf("J") &&
+                            method.returnType == "V"
+                    }
+                }
+            }
+            require(mapRemoveMethodFound) {
+                "Expected verified $expectedMapClass->l(J)V map-key removal method for Anti-delete"
+            }
             fun invokeRegisters(instruction: Instruction): List<Int>? = when (instruction) {
                 is FiveRegisterInstruction -> when (instruction.registerCount) {
                     1 -> listOf(instruction.registerC)
@@ -188,6 +201,16 @@ val telegramAntiDeletePatch = bytecodePatch(
                     ?: error("Could not read delete-map lookup registers at instruction $mapLookupIndex")
                 require(registers.size == 3) {
                     "Expected map + wide-key registers for delete-map lookup; got $registers"
+                }
+                // Prove that this exact lookup supplies the ArrayList receiver being
+                // appended to. Merely finding the nearest f(J) call is insufficient in
+                // R8 methods containing several maps: a wrong match could remove an
+                // unrelated entry and leave the deletion IDs untouched.
+                val lookupResult = instructions.getOrNull(mapLookupIndex + 1)
+                require(lookupResult?.opcode == Opcode.MOVE_RESULT_OBJECT &&
+                    (lookupResult as? OneRegisterInstruction)?.registerA ==
+                    (invokeRegisters(instructions[index])?.firstOrNull())) {
+                    "Delete-map lookup at $mapLookupIndex does not feed the delete-ID ArrayList at $index"
                 }
                 require(instructions.getOrNull(index + 1)?.opcode !in setOf(
                     Opcode.MOVE_RESULT, Opcode.MOVE_RESULT_OBJECT, Opcode.MOVE_RESULT_WIDE,

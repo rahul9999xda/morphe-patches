@@ -16,16 +16,32 @@ public final class ForwardingCoordinator {
     private final ForwardingRuleStore store;
     private final TelegramMessageGateway gateway;
     private final Executor executor;
+    private final Executor forwardExecutor;
+    private final Executor copyExecutor;
     private final Set<String> inFlight = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final LinkedHashSet<String> recentlyDispatched = new LinkedHashSet<>();
     private static final int MAX_RECENT_KEYS = 2048;
     private volatile boolean running;
 
+    /** Backward-compatible constructor; older callers intentionally share one delivery queue. */
     public ForwardingCoordinator(ForwardingRuleStore store, TelegramMessageGateway gateway, Executor executor) {
-        if (store == null || gateway == null || executor == null) throw new IllegalArgumentException("Dependencies are required");
+        this(store, gateway, executor, executor, executor);
+    }
+
+    /**
+     * Event matching, FORWARD delivery and COPY delivery have independent queues. A slow
+     * media/forward operation can therefore no longer block text-copy automations (or vice versa).
+     */
+    public ForwardingCoordinator(ForwardingRuleStore store, TelegramMessageGateway gateway,
+                                 Executor eventExecutor, Executor forwardExecutor, Executor copyExecutor) {
+        if (store == null || gateway == null || eventExecutor == null
+                || forwardExecutor == null || copyExecutor == null)
+            throw new IllegalArgumentException("Dependencies are required");
         this.store = store;
         this.gateway = gateway;
-        this.executor = executor;
+        this.executor = eventExecutor;
+        this.forwardExecutor = forwardExecutor;
+        this.copyExecutor = copyExecutor;
     }
 
     public void start() { running = true; }
@@ -151,14 +167,26 @@ public final class ForwardingCoordinator {
                                 + " failed for destination " + destination, error);
             }
         };
+        Executor deliveryQueue = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY
+                ? copyExecutor : forwardExecutor;
         try {
-            if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
-                gateway.copy(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
-            } else {
-                gateway.forward(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
-            }
-        } catch (Throwable error) {
-            callback.onFailure(error);
+            deliveryQueue.execute(new Runnable() {
+                @Override public void run() {
+                    try {
+                        if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
+                            gateway.copy(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                        } else {
+                            gateway.forward(message.getAccountId(), message, destination, rule.isShowSenderName(), callback);
+                        }
+                    } catch (Throwable error) {
+                        callback.onFailure(error);
+                    }
+                }
+            });
+        } catch (RuntimeException rejected) {
+            // Queue rejection is a real automation failure. Release the de-duplication
+            // key in onFailure so a later Telegram update can retry this message.
+            callback.onFailure(rejected);
         }
     }
 }
