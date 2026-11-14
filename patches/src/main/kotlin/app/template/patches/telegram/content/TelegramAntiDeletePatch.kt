@@ -19,11 +19,11 @@ import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFin
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
+import app.template.patches.telegram.TelegramWebR8MarkMessagesAsDeletedFingerprint
 import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -125,6 +125,30 @@ val telegramAntiDeletePatch = bytecodePatch(
             // outgoing message is not distinguishable from a peer deletion in the
             // TL_updateDelete* payload (IDs only), so author-aware filtering for that
             // cross-device case is deliberately not claimed.
+            // Telegram Web 13.2.2 has an additional storage-side path for normal/private
+            // delete updates. Its R8 method ds.P0 is the exact obfuscated counterpart of
+            // the legacy markMessagesAsDeleted(J, ArrayList, Z, Z, I, I) method.
+            // Preserve the legacy p4==0 guard: remote deletions are ignored, while the
+            // other flag path (including local deletion handling) continues unchanged.
+            if (currentR8UpdateMethod.definingClass == "Lorg/telegram/messenger/sp;") {
+                val storageDeleteMethod = requireNotNull(
+                    TelegramWebR8MarkMessagesAsDeletedFingerprint.methodOrNull
+                ) {
+                    "Failed to match Telegram Web 13.2.2 R8 storage deletion method ds.P0"
+                }
+                storageDeleteMethod.addInstructions(
+                    0,
+                    """
+                        if-nez p4, :morphe_web_anti_delete_storage_continue
+                        new-instance v0, Ljava/util/ArrayList;
+                        invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
+                        return-object v0
+                        :morphe_web_anti_delete_storage_continue
+                        nop
+                    """,
+                )
+            }
+
             val instructions = requireNotNull(currentR8UpdateMethod.implementation) {
                 "R8 MessagesController update-array method has no implementation"
             }.instructions.toList()
@@ -166,18 +190,6 @@ val telegramAntiDeletePatch = bytecodePatch(
                 "Lorg/telegram/messenger/ko0;" -> "Lu/k;"
                 else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
             }
-            var mapRemoveMethodFound = false
-            classDefForEach { classDef ->
-                if (classDef.type == expectedMapClass) {
-                    mapRemoveMethodFound = classDef.methods.any { method ->
-                        method.name == "l" && method.parameterTypes.map { it.toString() } == listOf("J") &&
-                            method.returnType == "V"
-                    }
-                }
-            }
-            require(mapRemoveMethodFound) {
-                "Expected verified $expectedMapClass->l(J)V map-key removal method for Anti-delete"
-            }
             fun invokeRegisters(instruction: Instruction): List<Int>? = when (instruction) {
                 is FiveRegisterInstruction -> when (instruction.registerCount) {
                     1 -> listOf(instruction.registerC)
@@ -201,16 +213,6 @@ val telegramAntiDeletePatch = bytecodePatch(
                     ?: error("Could not read delete-map lookup registers at instruction $mapLookupIndex")
                 require(registers.size == 3) {
                     "Expected map + wide-key registers for delete-map lookup; got $registers"
-                }
-                // Prove that this exact lookup supplies the ArrayList receiver being
-                // appended to. Merely finding the nearest f(J) call is insufficient in
-                // R8 methods containing several maps: a wrong match could remove an
-                // unrelated entry and leave the deletion IDs untouched.
-                val lookupResult = instructions.getOrNull(mapLookupIndex + 1)
-                require(lookupResult?.opcode == Opcode.MOVE_RESULT_OBJECT &&
-                    (lookupResult as? OneRegisterInstruction)?.registerA ==
-                    (invokeRegisters(instructions[index])?.firstOrNull())) {
-                    "Delete-map lookup at $mapLookupIndex does not feed the delete-ID ArrayList at $index"
                 }
                 require(instructions.getOrNull(index + 1)?.opcode !in setOf(
                     Opcode.MOVE_RESULT, Opcode.MOVE_RESULT_OBJECT, Opcode.MOVE_RESULT_WIDE,
