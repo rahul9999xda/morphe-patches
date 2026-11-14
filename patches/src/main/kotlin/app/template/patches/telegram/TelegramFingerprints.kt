@@ -1647,19 +1647,20 @@ val TelegramR8ProcessUpdateArrayWebFingerprint = Fingerprint(
 )
 
 val TelegramR8RichHtmlPasteNormalFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/yf;", name = "onTextContextMenuItem",
+    // Telegram Android 13.2.2 build 73031: current paste owner is the
+    // R8-renamed EditText subclass m.s (direct superclass EditText).
+    definingClass = "Lm/s;", name = "onTextContextMenuItem",
     returnType = "Z", parameters = listOf("I"),
 )
 val TelegramR8RichHtmlPasteWebFingerprint = Fingerprint(
-    // Web 13.2.2 R8 moved the chat composer EditText to hh.j1. Its own
-    // implementation already invokes the same direct superclass method.
-    definingClass = "Lhh/j1;", name = "onTextContextMenuItem",
+    // Telegram Web 13.2.2 build 73039 uses the same AndroidX EditText owner.
+    definingClass = "Lm/s;", name = "onTextContextMenuItem",
     returnType = "Z", parameters = listOf("I"),
 )
 val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
-    // Plus Messenger 13.2.1.0 build 22678 moved the composer input view to
-    // org.telegram.ui.iv.l2; it still delegates the normal paste path to rh0.
-    definingClass = "Lorg/telegram/ui/iv/l2;",
+    // Plus Messenger 13.2.1.0 build 22678 uses AppCompat EditText l;
+    // its override delegates paste to AppCompat receive-content before super.
+    definingClass = "Landroidx/appcompat/widget/l;",
     name = "onTextContextMenuItem", returnType = "Z", parameters = listOf("I"),
 )
 

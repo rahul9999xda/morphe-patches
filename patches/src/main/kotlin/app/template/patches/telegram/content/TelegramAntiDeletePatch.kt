@@ -20,6 +20,9 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
+import com.android.tools.smali.dexlib2.iface.instruction.Instruction
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -150,22 +153,51 @@ val telegramAntiDeletePatch = bytecodePatch(
                 "Expected one normal and one channel remote-delete ID append in R8 update processing; " +
                     "found ${deleteAppendIndexes.size} appends for ${matchedDeleteFields.joinToString()}"
             }
-            // The addAll return value is intentionally unused in all three audited DEXes.
-            // Replacing only the invoke with NOP is verifier-safe only while no move-result
-            // immediately follows it. Guard this invariant so a future Telegram/Plus build
-            // cannot silently produce invalid bytecode if the compiler starts consuming it.
-            val moveResultOpcodes = setOf(
-                Opcode.MOVE_RESULT,
-                Opcode.MOVE_RESULT_OBJECT,
-                Opcode.MOVE_RESULT_WIDE,
-            )
-            require(deleteAppendIndexes.all { index ->
-                instructions.getOrNull(index + 1)?.opcode !in moveResultOpcodes
-            }) {
-                "Remote-delete addAll result is consumed; refusing unsafe single-instruction NOP replacement"
+            // Removing only addAll leaves an empty chat-key entry in the delete map.
+            // Telegram subsequently dispatches that entry to NotificationCenter and the
+            // notification controller; some consumers interpret an empty ID list as a
+            // chat-wide deletion refresh. Remove the key itself instead, so no remote
+            // deletion event is emitted downstream at all. The nearest preceding map
+            // lookup is the exact map/key pair used to obtain the ArrayList receiver.
+            // Telegram/Web use La0/h (f/l, m/n); Plus uses Lu/k (f/l, n/q).
+            val expectedMapClass = when (currentR8UpdateMethod.definingClass) {
+                "Lorg/telegram/messenger/wp;", "Lorg/telegram/messenger/sp;" -> "La0/h;"
+                "Lorg/telegram/messenger/ko0;" -> "Lu/k;"
+                else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
+            }
+            fun invokeRegisters(instruction: Instruction): List<Int>? = when (instruction) {
+                is FiveRegisterInstruction -> when (instruction.registerCount) {
+                    1 -> listOf(instruction.registerC)
+                    2 -> listOf(instruction.registerC, instruction.registerD)
+                    3 -> listOf(instruction.registerC, instruction.registerD, instruction.registerE)
+                    4 -> listOf(instruction.registerC, instruction.registerD, instruction.registerE, instruction.registerF)
+                    5 -> listOf(instruction.registerC, instruction.registerD, instruction.registerE, instruction.registerF, instruction.registerG)
+                    else -> null
+                }
+                is RegisterRangeInstruction -> (0 until instruction.registerCount).map { instruction.startRegister + it }
+                else -> null
             }
             deleteAppendIndexes.sortedDescending().forEach { index ->
-                currentR8UpdateMethod.replaceInstruction(index, "nop")
+                val mapLookupIndex = (index - 1 downTo 0).firstOrNull { candidate ->
+                    val reference = (instructions[candidate] as? ReferenceInstruction)?.reference as? MethodReference
+                    reference?.definingClass == expectedMapClass && reference.name == "f" &&
+                        reference.parameterTypes == listOf("J") && reference.returnType == "Ljava/lang/Object;"
+                } ?: error("Could not resolve the delete-map key preceding addAll at instruction $index")
+                val mapReference = (instructions[mapLookupIndex] as ReferenceInstruction).reference as MethodReference
+                val registers = invokeRegisters(instructions[mapLookupIndex])
+                    ?: error("Could not read delete-map lookup registers at instruction $mapLookupIndex")
+                require(registers.size == 3) {
+                    "Expected map + wide-key registers for delete-map lookup; got $registers"
+                }
+                require(instructions.getOrNull(index + 1)?.opcode !in setOf(
+                    Opcode.MOVE_RESULT, Opcode.MOVE_RESULT_OBJECT, Opcode.MOVE_RESULT_WIDE,
+                )) {
+                    "Remote-delete addAll result is consumed; refusing an unsafe replacement"
+                }
+                currentR8UpdateMethod.replaceInstruction(
+                    index,
+                    "invoke-virtual {${registers.joinToString(", ") { "v$it" }}}, ${mapReference.definingClass}->l(J)V",
+                )
             }
         } else {
             // Historical named-class and Plus variants retain their original

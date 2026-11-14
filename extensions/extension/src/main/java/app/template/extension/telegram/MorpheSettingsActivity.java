@@ -456,24 +456,6 @@ public final class MorpheSettingsActivity extends Activity {
                 .show();
     }
 
-    /**
-     * Resolves a declared field on the class or one of its superclasses.
-     * Telegram TL peer/dialog fields may be inherited from generated base
-     * classes, so direct lookup on the concrete class is not sufficient.
-     */
-    private static Field findField(Class<?> type, String fieldName) {
-        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-            try {
-                return current.getDeclaredField(fieldName);
-            } catch (NoSuchFieldException ignored) {
-                // Continue through the generated TL class hierarchy.
-            } catch (Throwable ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
     private static String readStringField(Object object, String fieldName) {
         if (object == null) return "";
         try {
@@ -497,12 +479,89 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private static String telegramPeerKind(Object peer) {
-        if (peer == null) return "unknown";
-        String type = peer.getClass().getName().toLowerCase(java.util.Locale.ROOT);
-        if (type.endsWith("tl_peeruser") || type.endsWith("peeruser")) return "user";
-        if (type.endsWith("tl_peerchannel") || type.endsWith("peerchannel")) return "channel";
-        if (type.endsWith("tl_peerchat") || type.endsWith("peerchat")) return "group";
+        for (Class<?> type = peer == null ? null : peer.getClass(); type != null; type = type.getSuperclass()) {
+            String name = type.getName().toLowerCase(java.util.Locale.ROOT);
+            if (name.endsWith("tl_peeruser") || name.endsWith("peeruser")) return "user";
+            if (name.endsWith("tl_peerchannel") || name.endsWith("peerchannel")) return "channel";
+            if (name.endsWith("tl_peerchat") || name.endsWith("peerchat")) return "group";
+        }
         return "unknown";
+    }
+
+    private static Field findField(Class<?> type, String fieldName) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                // Continue through the superclass chain.
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static java.lang.reflect.Method findMethod(Class<?> type, String name, Class<?>... parameters) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                return current.getDeclaredMethod(name, parameters);
+            } catch (NoSuchMethodException ignored) {
+                // Continue through the superclass chain.
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Android/Web 13.2.2 keep the loaded dialog objects in MessagesController.R,
+     * an R8-renamed LongSparseArray implementation (La0/h: m() = size, n(i) = valueAt).
+     * The controller's y:ArrayList is NOT the dialog collection: DEX shows it is a
+     * separate pending/migration list. Reading y caused the picker to show only a
+     * narrow subset of chats and misrepresent their types.
+     */
+    private static ArrayList<Object> readDialogObjects(Object controller, Class<?> dialogBase) throws Exception {
+        // Current Telegram/Web: controller.R is La0/h (m() / n(int)).
+        // Current Plus: controller.v0 is Lu/k (n() / q(int)).
+        String[][] mapShapes = {
+                {"R", "m", "n"},
+                {"v0", "n", "q"},
+        };
+        for (String[] shape : mapShapes) {
+            Field mapField = findField(controller.getClass(), shape[0]);
+            if (mapField == null) continue;
+            mapField.setAccessible(true);
+            Object map = mapField.get(controller);
+            if (map == null) continue;
+            java.lang.reflect.Method size = findMethod(map.getClass(), shape[1]);
+            java.lang.reflect.Method valueAt = findMethod(map.getClass(), shape[2], int.class);
+            if (size == null || valueAt == null) continue;
+            size.setAccessible(true);
+            valueAt.setAccessible(true);
+            int count = ((Number) size.invoke(map)).intValue();
+            ArrayList<Object> dialogs = new ArrayList<>(Math.max(0, count));
+            for (int i = 0; i < count; i++) {
+                Object value = valueAt.invoke(map, i);
+                if (dialogBase.isInstance(value)) dialogs.add(value);
+            }
+            if (!dialogs.isEmpty()) return dialogs;
+        }
+
+        // Named legacy Telegram exposes an ArrayList<Dialog> named dialogs.
+        Field legacyField = findField(controller.getClass(), "dialogs");
+        if (legacyField != null) {
+            legacyField.setAccessible(true);
+            Object value = legacyField.get(controller);
+            if (value instanceof java.util.List) {
+                ArrayList<Object> dialogs = new ArrayList<>();
+                for (Object item : (java.util.List<?>) value) {
+                    if (dialogBase.isInstance(item)) dialogs.add(item);
+                }
+                if (!dialogs.isEmpty()) return dialogs;
+            }
+        }
+        throw new IllegalStateException("The loaded Telegram dialog map could not be resolved; refusing to use a non-dialog list");
     }
 
     /** Reads the actual dialog list from the verified Telegram 13.2.2 controller. */
@@ -510,12 +569,23 @@ public final class MorpheSettingsActivity extends Activity {
         ClassLoader cl = getClassLoader();
         final int account;
         try {
-            // R8 renamed UserConfig in both supplied 13.2.2 APKs. d20.t0 is the
-            // verified selected-account slot used by both variants.
-            Class<?> config = Class.forName("org.telegram.messenger.d20", false, cl);
-            java.lang.reflect.Field selected = config.getDeclaredField("t0");
-            selected.setAccessible(true);
-            account = selected.getInt(null);
+            int selectedAccount;
+            try {
+                // Telegram Android/Web 13.2.2: verified selected account slot.
+                Class<?> config = Class.forName("org.telegram.messenger.d20", false, cl);
+                Field selected = findField(config, "t0");
+                if (selected == null) throw new NoSuchFieldException("d20.t0");
+                selected.setAccessible(true);
+                selectedAccount = selected.getInt(null);
+            } catch (Throwable notAndroidWeb) {
+                // Plus 13.2.1.0: jm1.y0 is the persisted selectedAccount value.
+                Class<?> config = Class.forName("org.telegram.messenger.jm1", false, cl);
+                Field selected = findField(config, "y0");
+                if (selected == null) throw new NoSuchFieldException("jm1.y0");
+                selected.setAccessible(true);
+                selectedAccount = selected.getInt(null);
+            }
+            account = selectedAccount;
         } catch (Throwable unavailable) {
             throw new IllegalStateException("Could not resolve the active Telegram account", unavailable);
         }
@@ -523,7 +593,8 @@ public final class MorpheSettingsActivity extends Activity {
         String[] controllerNames = {
                 "org.telegram.messenger.wp", // Android 13.2.2 build 73031
                 "org.telegram.messenger.sp", // Web 13.2.2 build 73039
-                "org.telegram.messenger.MessagesController" // legacy fallback
+                "org.telegram.messenger.ko0", // Plus Messenger 13.2.1.0 build 22678
+                "org.telegram.messenger.MessagesController" // named legacy fallback
         };
         Class<?> controllerClass = null;
         Object controller = null;
@@ -531,8 +602,10 @@ public final class MorpheSettingsActivity extends Activity {
         for (String name : controllerNames) {
             try {
                 Class<?> candidate = Class.forName(name, false, cl);
-                String getterName = name.endsWith("MessagesController") ? "getInstance" : "s1";
-                java.lang.reflect.Method getter = candidate.getDeclaredMethod(getterName, int.class);
+                String getterName = name.endsWith("MessagesController") ? "getInstance"
+                        : (name.endsWith("ko0") ? "ud" : "s1");
+                java.lang.reflect.Method getter = findMethod(candidate, getterName, int.class);
+                if (getter == null) throw new NoSuchMethodException(name + "." + getterName + "(int)");
                 getter.setAccessible(true);
                 Object instance = getter.invoke(null, account);
                 if (instance != null) {
@@ -546,43 +619,28 @@ public final class MorpheSettingsActivity extends Activity {
             throw new IllegalStateException("Telegram MessagesController could not be resolved", lastError);
         }
 
-        // In both current 13.2.2 R8 variants, the real dialog collection is the
-        // controller's `y:ArrayList` field. Do not scan every controller field:
-        // unrelated lists contain users, messages, requests and UI state.
-        java.util.ArrayList<?> dialogs;
-        try {
-            java.lang.reflect.Field dialogList = controllerClass.getDeclaredField("y");
-            if (!java.util.ArrayList.class.isAssignableFrom(dialogList.getType())) {
-                throw new IllegalStateException("Resolved dialog field has an unexpected type");
-            }
-            dialogList.setAccessible(true);
-            Object value = dialogList.get(controller);
-            if (!(value instanceof java.util.ArrayList)) {
-                throw new IllegalStateException("Telegram dialog list is not initialized");
-            }
-            dialogs = (java.util.ArrayList<?>) value;
-        } catch (NoSuchFieldException legacy) {
-            // The named legacy API exposes its dialog list under a stable `dialogs` field.
-            java.lang.reflect.Field dialogList = controllerClass.getDeclaredField("dialogs");
-            dialogList.setAccessible(true);
-            Object value = dialogList.get(controller);
-            if (!(value instanceof java.util.ArrayList)) throw new IllegalStateException("Legacy dialog list is unavailable");
-            dialogs = (java.util.ArrayList<?>) value;
-        }
-
         Class<?> dialogBase = Class.forName("org.telegram.tgnet.TLRPC$Dialog", false, cl);
-        java.lang.reflect.Field idField = dialogBase.getDeclaredField("id");
-        java.lang.reflect.Field peerField = dialogBase.getDeclaredField("peer");
+        Field idField = findField(dialogBase, "id");
+        Field peerField = findField(dialogBase, "peer");
+        if (idField == null || peerField == null) {
+            throw new IllegalStateException("Telegram Dialog id/peer fields could not be resolved");
+        }
         idField.setAccessible(true);
         peerField.setAccessible(true);
         boolean legacyController = controllerClass.getName().endsWith("MessagesController");
-        java.lang.reflect.Method getUser = controllerClass.getDeclaredMethod(legacyController ? "getUser" : "a2", Long.class);
-        java.lang.reflect.Method getChat = controllerClass.getDeclaredMethod(legacyController ? "getChat" : "M0", Long.class);
+        boolean plusController = controllerClass.getName().endsWith("ko0");
+        java.lang.reflect.Method getUser = findMethod(controllerClass,
+                legacyController ? "getUser" : (plusController ? "ze" : "a2"), Long.class);
+        java.lang.reflect.Method getChat = findMethod(controllerClass,
+                legacyController ? "getChat" : (plusController ? "tc" : "M0"), Long.class);
+        if (getUser == null || getChat == null) {
+            throw new IllegalStateException("Telegram user/chat lookup methods could not be resolved");
+        }
         getUser.setAccessible(true);
         getChat.setAccessible(true);
+        ArrayList<Object> dialogs = readDialogObjects(controller, dialogBase);
         java.util.LinkedHashMap<Long, ChatChoice> unique = new java.util.LinkedHashMap<>();
-        synchronized (dialogs) {
-            for (Object dialog : dialogs) {
+        for (Object dialog : dialogs) {
                 if (dialog == null || !dialogBase.isInstance(dialog)) continue;
                 Object rawId = idField.get(dialog);
                 if (!(rawId instanceof Number)) continue;
@@ -624,7 +682,6 @@ public final class MorpheSettingsActivity extends Activity {
                     displayName = kind + " " + id;
                 }
                 unique.put(id, new ChatChoice(id, displayName, icon));
-            }
         }
         ArrayList<ChatChoice> result = new ArrayList<>(unique.values());
         java.util.Collections.sort(result, (a, b) -> a.title.compareToIgnoreCase(b.title));
