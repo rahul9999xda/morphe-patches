@@ -26,13 +26,13 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     )
 
     execute {
-        // Current Telegram/Web 13.1.1 and Plus 13.1.1.0: only intercept the Android Paste menu item
+        // Current Telegram/Web 13.2.2 and Plus 13.2.1.0: patch the Rich HTML superclass for the Android Paste menu item
         // (0x01020022), then delegate directly to the same superclass that the
         // original method uses for its non-rich-HTML fallback. All other menu
         // actions continue through the original method unchanged.
         val currentTargets = listOf(
-            // Telegram Android 13.2.2: yf extends jt; Telegram Web 13.2.2: hh.j1 extends Components/ft.
-            // Invoke the immediate superclass implementation, not an ancestor or interface.
+            // The child fingerprints locate the composer. The HTML parser itself is
+            // implemented by these parent classes, which must be patched directly.
             TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/jt;",
             TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
             // Plus Messenger 13.2.1.0 build 22678: composer input view iv.l2 extends rh0.
@@ -55,31 +55,41 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
         val currentTarget = matchedTargets.singleOrNull()
 
         if (currentTarget != null) {
-            val (matchedMethod, superClass) = currentTarget
-            var patched = false
+            val (matchedMethod, richPasteOwner) = currentTarget
+            // The Rich HTML parser is NOT in the composer subclass matched above.
+            // It lives in that class's immediate superclass (jt / ft / rh0).
+            // Calling invoke-super from the child therefore re-enters the HTML
+            // parser and was the reason the old patch still pasted formatted HTML.
+            // Patch the superclass implementation itself and route only Paste to
+            // its ordinary EditText fallback. That fallback is already the exact
+            // terminal branch used by the unmodified Rich HTML handler.
+            var patchedCount = 0
             classDefForEach { classDef ->
-                if (classDef.type != matchedMethod.definingClass) return@classDefForEach
-                val candidates = mutableClassDefBy(classDef).methods.filter {
-                    it.name == matchedMethod.name &&
+                if (classDef.type != richPasteOwner) return@classDefForEach
+                val mutableClass = mutableClassDefBy(classDef)
+                val candidates = mutableClass.methods.filter {
+                    it.name == "onTextContextMenuItem" &&
                         it.parameterTypes.map { type -> type.toString() } == listOf("I") &&
                         it.returnType == "Z"
                 }
                 val mutableMethod = candidates.singleOrNull()
-                    ?: error("Expected one editable Rich HTML paste handler ${matchedMethod.definingClass}->${matchedMethod.name}, found ${candidates.size}")
+                    ?: error("Expected one Rich HTML superclass handler $richPasteOwner->onTextContextMenuItem(I)Z, found ${candidates.size}")
                 mutableMethod.addInstructions(
                     0,
                     """
                         const v0, 0x1020022
-                        if-ne p1, v0, :morphe_rich_html_paste_continue
-                        invoke-super {p0, p1}, $superClass->onTextContextMenuItem(I)Z
+                        if-ne p1, v0, :morphe_rich_html_super_continue
+                        invoke-super {p0, p1}, Landroid/widget/EditText;->onTextContextMenuItem(I)Z
                         move-result v0
                         return v0
-                        :morphe_rich_html_paste_continue
+                        :morphe_rich_html_super_continue
                     """,
                 )
-                patched = true
+                patchedCount++
             }
-            check(patched) { "Could not patch editable Rich HTML paste handler" }
+            check(patchedCount == 1) {
+                "Expected exactly one editable Rich HTML superclass $richPasteOwner for ${matchedMethod.definingClass}, patched $patchedCount"
+            }
         } else {
             // Legacy releases expose the original named helper. Returning false
             // from that helper lets the caller proceed through its plain-text path.

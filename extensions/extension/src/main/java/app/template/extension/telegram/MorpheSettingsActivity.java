@@ -415,7 +415,7 @@ public final class MorpheSettingsActivity extends Activity {
         search.setTextSize(15);
         search.setTextColor(colorPrimary);
         search.setHintTextColor(colorHint);
-        search.setHint("Search chats and channels");
+        search.setHint("Search chats, groups, channels or ID");
         root.addView(search, params(-1, dp(48)));
         final ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);

@@ -404,11 +404,15 @@ public final class MorpheForwardingRuntime {
                             Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
                             Method copyMethod = helperClass.getMethod(mapping.copyMethod, accountClass,
                                     CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
-                            Object richText;
-                            try { richText = nativeMessage.getClass().getField(mapping.messageTextField).get(nativeMessage); }
-                            catch (Throwable missingTextField) { richText = null; }
-                            if (!(richText instanceof CharSequence)) richText = source.getText();
-                            copyMethod.invoke(null, accountInstance, richText, 0L, destinationChatId, false, 0, 0);
+                            // COPY is intentionally independent of Telegram's forwardability
+                            // predicate and noforwards flag. It creates a new text message at
+                            // the destination; no media or source attribution is copied.
+                            // Prefer Telegram's native CharSequence so URL/style spans survive.
+                            CharSequence copyText = extractCopyText(nativeMessage, source, mapping);
+                            if (copyText.toString().trim().isEmpty()) {
+                                throw new IllegalArgumentException("The source message has no copyable text");
+                            }
+                            copyMethod.invoke(null, accountInstance, copyText, 0L, destinationChatId, false, 0, 0);
                         } else {
                             Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
                             Class<?> paramsClass = Class.forName(mapping.sendParamsClass, false, loader);
@@ -430,6 +434,31 @@ public final class MorpheForwardingRuntime {
                     }
                 }
             });
+        }
+
+        private static CharSequence extractCopyText(Object nativeMessage, ForwardingMessage source,
+                                                    RuntimeProfile mapping) throws Exception {
+            Object richText = null;
+            try {
+                Field textField = nativeMessage.getClass().getField(mapping.messageTextField);
+                richText = textField.get(nativeMessage);
+            } catch (NoSuchFieldException ignored) { }
+            if (richText instanceof CharSequence && ((CharSequence) richText).length() > 0) {
+                return (CharSequence) richText;
+            }
+            // Some client variants leave MessageObject.text unset for protected posts
+            // until the media/text adapter has populated it. The raw TL message text is
+            // still the authoritative text payload and is safe to resend as plain text.
+            Object owner = nativeMessage.getClass().getField(mapping.messageOwnerField).get(nativeMessage);
+            if (owner != null) {
+                try {
+                    Object raw = owner.getClass().getField("message").get(owner);
+                    if (raw instanceof CharSequence && ((CharSequence) raw).length() > 0) {
+                        return (CharSequence) raw;
+                    }
+                } catch (NoSuchFieldException ignored) { }
+            }
+            return source.getText();
         }
 
         private static Method currentForwardMethod(Class<?> helperClass, Class<?> messageClass,
