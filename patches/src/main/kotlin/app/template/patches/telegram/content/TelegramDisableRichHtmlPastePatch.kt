@@ -26,84 +26,55 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     )
 
     execute {
-        // Current Telegram/Web 13.2.2 and Plus 13.2.1.0: patch the Rich HTML superclass for the Android Paste menu item
-        // (0x01020022), then delegate directly to the same superclass that the
-        // original method uses for its non-rich-HTML fallback. All other menu
-        // actions continue through the original method unchanged.
+        // The Rich HTML parser lives in the superclass handler itself, not in the
+        // composer subclass. Patching the child and calling invoke-super simply
+        // re-enters that parser (the previous implementation's core bug).
         val currentTargets = listOf(
-            // The child fingerprints locate the composer. The HTML parser itself is
-            // implemented by these parent classes, which must be patched directly.
             TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/jt;",
             TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
-            // Plus Messenger 13.2.1.0 build 22678: composer input view iv.l2 extends rh0.
             TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/rh0;",
-            // Historical named targets retained independently.
-            ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to
-                "Lorg/telegram/ui/Components/mg;",
-            ChatActivityEnterViewRichHtmlPastePlusFingerprint to
-                "Landroid/widget/EditText;",
-            // Telegram 13.0.3 uses a different owner and superclass.
-            ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to
-                "Lorg/telegram/ui/Components/lg;",
         )
-        val matchedTargets = currentTargets.mapNotNull { (fingerprint, superClass) ->
-            fingerprint.methodOrNull?.let { it to superClass }
+        val matchedTargets = currentTargets.mapNotNull { (fingerprint, parentClass) ->
+            fingerprint.methodOrNull?.let { parentClass }
         }
         require(matchedTargets.size <= 1) {
-            "Ambiguous Rich HTML paste target: matched ${matchedTargets.size} current handlers; refusing to patch an arbitrary class"
+            "Ambiguous Rich HTML paste target: matched ${matchedTargets.size} composer variants"
         }
-        val currentTarget = matchedTargets.singleOrNull()
-
-        if (currentTarget != null) {
-            val (matchedMethod, richPasteOwner) = currentTarget
-            // The Rich HTML parser is NOT in the composer subclass matched above.
-            // It lives in that class's immediate superclass (jt / ft / rh0).
-            // Calling invoke-super from the child therefore re-enters the HTML
-            // parser and was the reason the old patch still pasted formatted HTML.
-            // Patch the superclass implementation itself and route only Paste to
-            // its ordinary EditText fallback. That fallback is already the exact
-            // terminal branch used by the unmodified Rich HTML handler.
-            var patchedCount = 0
+        val parentClass = matchedTargets.singleOrNull()
+        if (parentClass != null) {
+            var patched = false
             classDefForEach { classDef ->
-                if (classDef.type != richPasteOwner) return@classDefForEach
+                if (classDef.type != parentClass) return@classDefForEach
                 val mutableClass = mutableClassDefBy(classDef)
-                val candidates = mutableClass.methods.filter {
+                val handlers = mutableClass.methods.filter {
                     it.name == "onTextContextMenuItem" &&
                         it.parameterTypes.map { type -> type.toString() } == listOf("I") &&
                         it.returnType == "Z"
                 }
-                val mutableMethod = candidates.singleOrNull()
-                    ?: error("Expected one Rich HTML superclass handler $richPasteOwner->onTextContextMenuItem(I)Z, found ${candidates.size}")
-                mutableMethod.addInstructions(
+                val handler = handlers.singleOrNull()
+                    ?: error("Expected one parent Rich HTML handler $parentClass->onTextContextMenuItem(I)Z, found ${handlers.size}")
+                handler.addInstructions(
                     0,
                     """
                         const v0, 0x1020022
-                        if-ne p1, v0, :morphe_rich_html_super_continue
-                        invoke-super {p0, p1}, Landroid/widget/EditText;->onTextContextMenuItem(I)Z
+                        if-ne p1, v0, :morphe_rich_html_paste_continue
+                        invoke-super {p0, p1}, Lorg/telegram/ui/Components/EditTextBoldCursor;->onTextContextMenuItem(I)Z
                         move-result v0
                         return v0
-                        :morphe_rich_html_super_continue
+                        :morphe_rich_html_paste_continue
                     """,
                 )
-                patchedCount++
+                patched = true
             }
-            check(patchedCount == 1) {
-                "Expected exactly one editable Rich HTML superclass $richPasteOwner for ${matchedMethod.definingClass}, patched $patchedCount"
-            }
+            check(patched) { "Could not locate parent Rich HTML handler $parentClass" }
         } else {
-            // Legacy releases expose the original named helper. Returning false
-            // from that helper lets the caller proceed through its plain-text path.
+            // Historical named helper: returning false selects its caller's
+            // existing plain-text paste fallback.
             val legacyMethod = ChatActivityEnterViewHandleRichHtmlPasteFingerprint.methodOrNull
                 ?: throw IllegalStateException(
-                    "Rich HTML paste target not found: no current Telegram/Web/Plus handler or legacy handleRichHtmlPaste()Z method matched."
+                    "Rich HTML paste target not found: no current composer or legacy handleRichHtmlPaste()Z method matched."
                 )
-            legacyMethod.addInstructions(
-                0,
-                """
-                    const/4 v0, 0x0
-                    return v0
-                """,
-            )
+            legacyMethod.addInstructions(0, "const/4 v0, 0x0\nreturn v0")
         }
     }
 }

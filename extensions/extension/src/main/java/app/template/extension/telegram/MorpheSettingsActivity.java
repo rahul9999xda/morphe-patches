@@ -415,7 +415,7 @@ public final class MorpheSettingsActivity extends Activity {
         search.setTextSize(15);
         search.setTextColor(colorPrimary);
         search.setHintTextColor(colorHint);
-        search.setHint("Search chats, groups, channels or ID");
+        search.setHint("Search chats and channels");
         root.addView(search, params(-1, dp(48)));
         final ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
@@ -455,21 +455,38 @@ public final class MorpheSettingsActivity extends Activity {
                 .show();
     }
 
-    private static String readStringField(Object object, String fieldName) {
-        if (object == null) return "";
+    private static java.lang.reflect.Field findTelegramField(Object object, String fieldName) {
+        if (object == null) return null;
+        for (Class<?> type = object.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
+            try {
+                java.lang.reflect.Field field = type.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return field;
+            } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
+    private static Object readTelegramField(Object object, String fieldName) {
         try {
-            java.lang.reflect.Field field = object.getClass().getField(fieldName);
-            Object value = field.get(object);
-            return value == null ? "" : String.valueOf(value).trim();
-        } catch (Throwable ignored) { return ""; }
+            java.lang.reflect.Field field = findTelegramField(object, fieldName);
+            return field == null ? null : field.get(object);
+        } catch (Throwable ignored) { return null; }
+    }
+
+    private static String readStringField(Object object, String fieldName) {
+        Object value = readTelegramField(object, fieldName);
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     private static long readLongField(Object object, String fieldName) {
-        if (object == null) return 0L;
-        try {
-            Object value = object.getClass().getField(fieldName).get(object);
-            return value instanceof Number ? ((Number) value).longValue() : 0L;
-        } catch (Throwable ignored) { return 0L; }
+        Object value = readTelegramField(object, fieldName);
+        return value instanceof Number ? ((Number) value).longValue() : 0L;
+    }
+
+    private static boolean readBooleanField(Object object, String fieldName) {
+        Object value = readTelegramField(object, fieldName);
+        return value instanceof Boolean && (Boolean) value;
     }
 
     /** Reads the actual dialog list from the verified Telegram 13.2.2 controller. */
@@ -560,19 +577,38 @@ public final class MorpheSettingsActivity extends Activity {
                 long userId = readLongField(peer, "user_id");
                 long chatId = readLongField(peer, "chat_id");
                 long channelId = readLongField(peer, "channel_id");
+                String peerType = peer == null ? "" : peer.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
                 String displayName = "";
                 String icon = "💬";
-                if (userId != 0) {
-                    Object user = getUser.invoke(controller, Long.valueOf(userId));
+
+                // Some R8 dialog objects expose an unset/null peer in the cached
+                // list even though Dialog.id is valid. Resolve by the canonical
+                // dialog ID as a fallback instead of displaying "Group -<ID>".
+                if (userId == 0 && chatId == 0 && channelId == 0) {
+                    if (id > 0 || peerType.contains("peeruser")) userId = Math.abs(id);
+                    else if (peerType.contains("peerchannel")) channelId = Math.abs(id);
+                    else if (peerType.contains("peerchat")) chatId = Math.abs(id);
+                    else if (id < 0) {
+                        Object chat = getChat.invoke(controller, Long.valueOf(Math.abs(id)));
+                        if (chat != null) {
+                            displayName = readStringField(chat, "title");
+                            boolean broadcast = readBooleanField(chat, "broadcast");
+                            icon = broadcast ? "📢" : "👥";
+                        }
+                    }
+                }
+                if (displayName.isEmpty() && userId != 0) {
+                    Object user = getUser.invoke(controller, Long.valueOf(Math.abs(userId)));
                     displayName = (readStringField(user, "first_name") + " "
                             + readStringField(user, "last_name")).trim();
                     if (displayName.isEmpty()) displayName = readStringField(user, "username");
                     icon = "👤";
-                } else if (chatId != 0 || channelId != 0) {
-                    long lookupId = channelId != 0 ? channelId : chatId;
+                } else if (displayName.isEmpty() && (chatId != 0 || channelId != 0)) {
+                    long lookupId = Math.abs(channelId != 0 ? channelId : chatId);
                     Object chat = getChat.invoke(controller, Long.valueOf(lookupId));
                     displayName = readStringField(chat, "title");
-                    icon = channelId != 0 ? "📢" : "👥";
+                    boolean broadcast = readBooleanField(chat, "broadcast");
+                    icon = (channelId != 0 || broadcast) ? "📢" : "👥";
                 }
                 if (displayName.isEmpty()) {
                     String kind = userId != 0 || id > 0 ? "User" : (channelId != 0 || id <= -1000000000000L ? "Channel" : "Group");
