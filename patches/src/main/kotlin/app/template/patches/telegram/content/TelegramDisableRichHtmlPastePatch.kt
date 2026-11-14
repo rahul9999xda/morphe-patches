@@ -15,7 +15,7 @@ import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
     name = "Use normal paste for Rich HTML clipboard content",
-    description = "Converts clipboard paste to plain text before inserting it into Telegram's composer.",
+    description = "Bypasses custom rich-content paste handling and delegates paste to the standard EditText implementation.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -24,15 +24,12 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     )
 
     execute {
-        // Verified directly in the supplied 13.2.2 / 13.2.1.0 DEX files:
-        // Android + Web: m/s extends android.widget.EditText and intercepts
-        // paste via AndroidX receive-content; Plus: AppCompat l extends EditText
-        // and calls androidx.appcompat.widget.x.b before the superclass.
-        // PlainTextPaste converts ClipData items to String and replaces only the
-        // current selection, so paste retains text but discards HTML formatting.
-        // Android and Web intentionally share the same current DEX owner/method,
-        // so list that fingerprint once to avoid treating the duplicate declaration
-        // as two separate matches.
+        // Restore the legacy behavior: intercept only Paste / Paste as plain text,
+        // then delegate to the actual EditText superclass. The verified current
+        // Telegram/Web m.s and Plus AppCompat l classes both extend EditText.
+        // This bypasses AndroidX rich-content receive handling without flattening
+        // clipboard CharSequences in a separate helper, and leaves every other
+        // context-menu action on the original method path.
         val currentPasteMethods = listOf(
             TelegramR8RichHtmlPasteNormalFingerprint,
             TelegramPlus13111RichHtmlPasteFingerprint,
@@ -46,10 +43,13 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
             currentPasteMethod.addInstructions(
                 0,
                 """
-                    invoke-static {p0, p1}, Lapp/template/extension/telegram/PlainTextPaste;->handle(Landroid/widget/EditText;I)Z
+                    const v0, 0x1020022
+                    if-eq p1, v0, :morphe_rich_paste_super
+                    const v0, 0x1020031
+                    if-ne p1, v0, :morphe_rich_paste_continue
+                    :morphe_rich_paste_super
+                    invoke-super {p0, p1}, Landroid/widget/EditText;->onTextContextMenuItem(I)Z
                     move-result v0
-                    if-eqz v0, :morphe_rich_paste_continue
-                    const/4 v0, 0x1
                     return v0
                     :morphe_rich_paste_continue
                 """,
@@ -92,7 +92,10 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                         0,
                         """
                             const v0, 0x1020022
+                            if-eq p1, v0, :morphe_legacy_paste_super
+                            const v0, 0x1020031
                             if-ne p1, v0, :morphe_legacy_paste_continue
+                            :morphe_legacy_paste_super
                             invoke-super {p0, p1}, Landroid/widget/EditText;->onTextContextMenuItem(I)Z
                             move-result v0
                             return v0

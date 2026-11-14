@@ -23,14 +23,10 @@ import app.template.patches.telegram.CheckCanOpenChat4Web1303Fingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonNormalFingerprint
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonWebFingerprint
-import app.template.patches.telegram.TelegramR8IsSensitiveNormalFingerprint
-import app.template.patches.telegram.TelegramR8IsSensitiveWebFingerprint
 import app.template.patches.telegram.TelegramR8ShowSensitiveContentNormalFingerprint
 import app.template.patches.telegram.TelegramR8ShowSensitiveContentWebFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSensitiveNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSensitiveWebFingerprint
-import app.template.patches.telegram.TelegramR8MessageObjectIsHiddenSensitiveNormalFingerprint
-import app.template.patches.telegram.TelegramR8MessageObjectIsHiddenSensitiveWebFingerprint
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertNormalFingerprint
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertWebFingerprint
 import app.template.patches.telegram.TelegramR8CheckCanOpenChat4NormalFingerprint
@@ -285,15 +281,14 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 const/4 v0, 0x0
                 return-object v0
             """)
-            val currentIsSensitive =
-                TelegramR8IsSensitiveNormalFingerprint.methodOrNull
-                    ?: TelegramR8IsSensitiveWebFingerprint.methodOrNull
-                    ?: TelegramPlusR8IsSensitiveFingerprint.methodOrNull
-            requireNotNull(currentIsSensitive) { "Missing R8 MessagesController.isSensitive(ArrayList)Z" }
-                .addInstructions(0, """
-                    const/4 v0, 0x0
-                    return v0
-                """)
+            // Plus has a distinct, DEX-verified restriction-list predicate. The
+            // Android/Web class has no equivalent ArrayList predicate: its method
+            // named s(ArrayList)Z is the folder-peer update handler and must remain
+            // untouched to preserve Telegram's dialog/folder update processing.
+            TelegramPlusR8IsSensitiveFingerprint.methodOrNull?.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
             val currentMessageIsSensitive =
                 TelegramR8MessageObjectIsSensitiveNormalFingerprint.methodOrNull
                     ?: TelegramR8MessageObjectIsSensitiveWebFingerprint.methodOrNull
@@ -303,14 +298,6 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                     const/4 v0, 0x0
                     return v0
                 """)
-            val currentMessageIsHiddenSensitive =
-                TelegramR8MessageObjectIsHiddenSensitiveNormalFingerprint.methodOrNull
-                    ?: TelegramR8MessageObjectIsHiddenSensitiveWebFingerprint.methodOrNull
-            // Plus folds the sensitive and hidden-sensitive checks into x20.E6().
-            currentMessageIsHiddenSensitive?.addInstructions(0, """
-                const/4 v0, 0x0
-                return v0
-            """)
             val currentShowSensitiveContent =
                 TelegramR8ShowSensitiveContentNormalFingerprint.methodOrNull
                     ?: TelegramR8ShowSensitiveContentWebFingerprint.methodOrNull

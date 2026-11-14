@@ -1495,14 +1495,6 @@ val TelegramR8GetRestrictionReasonWebFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/sp;", name = "F1", returnType = "Ljava/lang/String;",
     parameters = listOf("Ljava/util/ArrayList;"),
 )
-val TelegramR8IsSensitiveNormalFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/wp;", name = "s", returnType = "Z",
-    parameters = listOf("Ljava/util/ArrayList;"),
-)
-val TelegramR8IsSensitiveWebFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/sp;", name = "s", returnType = "Z",
-    parameters = listOf("Ljava/util/ArrayList;"),
-)
 val TelegramR8ShowSensitiveContentNormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/wp;", name = "T4", returnType = "Z", parameters = emptyList(),
 )
@@ -1614,17 +1606,12 @@ val TelegramR8IsUserNoForwardsUserFullWebFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/sp;", name = "K2", returnType = "Z",
     parameters = listOf("Lorg/telegram/tgnet/TLRPC\$UserFull;"),
 )
+// Android/Web 13.2.2 MessageObject.p4()Z scans TL_message.restriction_reason for sensitive content.
 val TelegramR8MessageObjectIsSensitiveNormalFingerprint = Fingerprint(
-    definingClass = MESSAGE_OBJECT_NORMAL, name = "q4", returnType = "Z", parameters = emptyList(),
+    definingClass = MESSAGE_OBJECT_NORMAL, name = "p4", returnType = "Z", parameters = emptyList(),
 )
 val TelegramR8MessageObjectIsSensitiveWebFingerprint = Fingerprint(
-    definingClass = MESSAGE_OBJECT_WEB, name = "q4", returnType = "Z", parameters = emptyList(),
-)
-val TelegramR8MessageObjectIsHiddenSensitiveNormalFingerprint = Fingerprint(
-    definingClass = MESSAGE_OBJECT_NORMAL, name = "y3", returnType = "Z", parameters = emptyList(),
-)
-val TelegramR8MessageObjectIsHiddenSensitiveWebFingerprint = Fingerprint(
-    definingClass = MESSAGE_OBJECT_WEB, name = "y3", returnType = "Z", parameters = emptyList(),
+    definingClass = MESSAGE_OBJECT_WEB, name = "p4", returnType = "Z", parameters = emptyList(),
 )
 val TelegramR8ShowCantOpenAlertNormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/wp;", name = "S4", returnType = "V",
