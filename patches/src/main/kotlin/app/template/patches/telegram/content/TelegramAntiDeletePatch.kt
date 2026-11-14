@@ -137,8 +137,18 @@ val telegramAntiDeletePatch = bytecodePatch(
                     (field.definingClass == "Lorg/telegram/tgnet/tl/TL_update\$TL_updateDeleteMessages;" ||
                         field.definingClass == "Lorg/telegram/tgnet/tl/TL_update\$TL_updateDeleteChannelMessages;")
             }
-            require(deleteAppendIndexes.size == 2) {
-                "Expected exactly two remote-delete list appends in R8 update processing, found ${deleteAppendIndexes.size}"
+            val expectedDeleteFields = setOf(
+                "Lorg/telegram/tgnet/tl/TL_update\$TL_updateDeleteMessages;",
+                "Lorg/telegram/tgnet/tl/TL_update\$TL_updateDeleteChannelMessages;",
+            )
+            val matchedDeleteFields = deleteAppendIndexes.mapNotNull { index ->
+                ((instructions[index - 1] as? ReferenceInstruction)?.reference as? FieldReference)
+                    ?.definingClass
+            }
+            require(deleteAppendIndexes.size == 2 && matchedDeleteFields.toSet() == expectedDeleteFields &&
+                matchedDeleteFields.size == expectedDeleteFields.size) {
+                "Expected one normal and one channel remote-delete ID append in R8 update processing; " +
+                    "found ${deleteAppendIndexes.size} appends for ${matchedDeleteFields.joinToString()}"
             }
             // The addAll return value is intentionally unused in all three audited DEXes.
             // Replacing only the invoke with NOP is verifier-safe only while no move-result

@@ -1,7 +1,6 @@
 package app.template.patches.telegram.content
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.instructionsOrNull
 import app.morphe.patcher.patch.bytecodePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
@@ -26,39 +25,47 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     )
 
     execute {
-        // The Rich HTML parser lives in the superclass handler itself, not in the
-        // composer subclass. Patching the child and calling invoke-super simply
-        // re-enters that parser (the previous implementation's core bug).
+        // The composer subclasses (yf / hh.j1 / iv.l2) inherit the actual Rich HTML
+        // parser from their immediate EditText parent (jt / ft / rh0). Calling
+        // invoke-super from the composer therefore re-enters the parser and is not
+        // a plain-text fallback. Patch the parser-owning parent method itself so
+        // Paste goes directly to its Android EditText fallback before any MIME
+        // inspection or HTML conversion takes place.
         val currentTargets = listOf(
             TelegramR8RichHtmlPasteNormalFingerprint to "Lorg/telegram/ui/Components/jt;",
             TelegramR8RichHtmlPasteWebFingerprint to "Lorg/telegram/ui/Components/ft;",
             TelegramPlus13111RichHtmlPasteFingerprint to "Lorg/telegram/ui/Components/rh0;",
+            // Earlier named owners are retained with their independently verified
+            // parser-owning superclasses.
+            ChatActivityEnterViewRichHtmlPasteCurrentFingerprint to "Lorg/telegram/ui/Components/mg;",
+            ChatActivityEnterViewRichHtmlPastePlusFingerprint to "Lorg/telegram/ui/Components/qh0;",
+            ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint to "Lorg/telegram/ui/Components/lg;",
         )
         val matchedTargets = currentTargets.mapNotNull { (fingerprint, parentClass) ->
             fingerprint.methodOrNull?.let { parentClass }
-        }
+        }.distinct()
         require(matchedTargets.size <= 1) {
-            "Ambiguous Rich HTML paste target: matched ${matchedTargets.size} composer variants"
+            "Ambiguous Rich HTML paste owners: matched ${matchedTargets.size} parser parents; refusing to patch an arbitrary class"
         }
-        val parentClass = matchedTargets.singleOrNull()
-        if (parentClass != null) {
+        val parserParent = matchedTargets.singleOrNull()
+
+        if (parserParent != null) {
             var patched = false
             classDefForEach { classDef ->
-                if (classDef.type != parentClass) return@classDefForEach
-                val mutableClass = mutableClassDefBy(classDef)
-                val handlers = mutableClass.methods.filter {
+                if (classDef.type != parserParent) return@classDefForEach
+                val candidates = mutableClassDefBy(classDef).methods.filter {
                     it.name == "onTextContextMenuItem" &&
                         it.parameterTypes.map { type -> type.toString() } == listOf("I") &&
                         it.returnType == "Z"
                 }
-                val handler = handlers.singleOrNull()
-                    ?: error("Expected one parent Rich HTML handler $parentClass->onTextContextMenuItem(I)Z, found ${handlers.size}")
-                handler.addInstructions(
+                val mutableMethod = candidates.singleOrNull()
+                    ?: error("Expected one parser-owning paste handler $parserParent, found ${candidates.size}")
+                mutableMethod.addInstructions(
                     0,
                     """
                         const v0, 0x1020022
                         if-ne p1, v0, :morphe_rich_html_paste_continue
-                        invoke-super {p0, p1}, Lorg/telegram/ui/Components/EditTextBoldCursor;->onTextContextMenuItem(I)Z
+                        invoke-super {p0, p1}, Landroid/widget/EditText;->onTextContextMenuItem(I)Z
                         move-result v0
                         return v0
                         :morphe_rich_html_paste_continue
@@ -66,15 +73,21 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                 )
                 patched = true
             }
-            check(patched) { "Could not locate parent Rich HTML handler $parentClass" }
+            check(patched) { "Could not find parser-owning Rich HTML paste class $parserParent" }
         } else {
-            // Historical named helper: returning false selects its caller's
-            // existing plain-text paste fallback.
+            // Legacy releases expose the original named helper. Returning false
+            // from that helper lets the caller proceed through its plain-text path.
             val legacyMethod = ChatActivityEnterViewHandleRichHtmlPasteFingerprint.methodOrNull
                 ?: throw IllegalStateException(
-                    "Rich HTML paste target not found: no current composer or legacy handleRichHtmlPaste()Z method matched."
+                    "Rich HTML paste target not found: no current Telegram/Web/Plus handler or legacy handleRichHtmlPaste()Z method matched."
                 )
-            legacyMethod.addInstructions(0, "const/4 v0, 0x0\nreturn v0")
+            legacyMethod.addInstructions(
+                0,
+                """
+                    const/4 v0, 0x0
+                    return v0
+                """,
+            )
         }
     }
 }
