@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
+import java.lang.reflect.Field;
 import android.net.Uri;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -453,6 +454,24 @@ public final class MorpheSettingsActivity extends Activity {
                 .setPositiveButton("Apply", (dialog, which) -> target.setText(joinIds(selected)))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    /**
+     * Resolves a declared field on the class or one of its superclasses.
+     * Telegram TL peer/dialog fields may be inherited from generated base
+     * classes, so direct lookup on the concrete class is not sufficient.
+     */
+    private static Field findField(Class<?> type, String fieldName) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                // Continue through the generated TL class hierarchy.
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static String readStringField(Object object, String fieldName) {
