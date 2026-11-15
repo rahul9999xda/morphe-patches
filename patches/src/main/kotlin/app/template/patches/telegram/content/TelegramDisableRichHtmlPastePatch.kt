@@ -12,6 +12,7 @@ import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1
 import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
 import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteReceiveContentFingerprint
+import app.template.patches.telegram.TelegramPlusRichHtmlPasteReceiveContentFingerprint
 
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
@@ -55,28 +56,29 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                     :morphe_rich_paste_continue
                 """,
             )
-            // Android/Web also receive clipboard content through AndroidX's
-            // receive-content callback. Intercept that path separately because
-            // it can bypass onTextContextMenuItem() entirely (for example, when
-            // the platform delivers rich ClipData directly to the EditText).
-            if (currentPasteMethod.definingClass == "Lm/s;") {
-                val receiveContentMethod = requireNotNull(
-                    TelegramR8RichHtmlPasteReceiveContentFingerprint.methodOrNull,
-                ) {
-                    "Android/Web rich paste receive-content method Lm/s;->a(Lr0/g;)Lr0/g; was not found"
+            // Android/Web and Plus also receive clipboard content through their
+            // AndroidX/AppCompat receive-content callbacks. Intercept these paths
+            // separately because they can bypass onTextContextMenuItem() entirely.
+            val receiveContentMethod = if (currentPasteMethod.definingClass == "Lm/s;") {
+                requireNotNull(TelegramR8RichHtmlPasteReceiveContentFingerprint.methodOrNull) {
+                    "Android/Web receive-content method Lm/s;->a(Lr0/g;)Lr0/g; was not found"
                 }
-                receiveContentMethod.addInstructions(
-                    0,
-                    """
-                        invoke-static {p0, p1}, Lapp/template/extension/telegram/PlainTextPaste;->handleReceiveContent(Landroid/widget/EditText;Ljava/lang/Object;)Z
-                        move-result v0
-                        if-eqz v0, :morphe_rich_receive_content_continue
-                        const/4 v0, 0x0
-                        return-object v0
-                        :morphe_rich_receive_content_continue
-                    """,
-                )
+            } else {
+                requireNotNull(TelegramPlusRichHtmlPasteReceiveContentFingerprint.methodOrNull) {
+                    "Plus receive-content method AppCompat l->a(Ls0/d;)Ls0/d; was not found"
+                }
             }
+            receiveContentMethod.addInstructions(
+                0,
+                """
+                    invoke-static {p0, p1}, Lapp/template/extension/telegram/PlainTextPaste;->handleReceiveContent(Landroid/widget/EditText;Ljava/lang/Object;)Z
+                    move-result v0
+                    if-eqz v0, :morphe_rich_receive_content_continue
+                    const/4 v0, 0x0
+                    return-object v0
+                    :morphe_rich_receive_content_continue
+                """,
+            )
         } else {
             // Preserve support for older named releases whose composer still
             // exposes a dedicated handleRichHtmlPaste() helper.

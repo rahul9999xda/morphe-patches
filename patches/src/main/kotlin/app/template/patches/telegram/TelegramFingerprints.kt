@@ -1665,6 +1665,16 @@ val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
 )
 
 
+// Telegram Web 13.2.2 build 73039: storage-side normal/private deletion worker.
+// Restored verbatim from the earlier telegram-web-antidelete-repair.zip which
+// the user confirmed fixed private-chat deletion.
+val TelegramWebR8MarkMessagesAsDeletedFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/ds;",
+    name = "P0",
+    returnType = "Ljava/util/ArrayList;",
+    parameters = listOf("J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I"),
+)
+
 // R8 13.2.2 / Plus 13.2.1 remote-push deletion handler. The owner and method
 // signature are stable across the three supplied APKs; the notification-controller
 // call inside it is variant-specific and is validated by AntiDeletePatch.
@@ -1683,6 +1693,15 @@ val TelegramR8RichHtmlPasteReceiveContentFingerprint = Fingerprint(
     name = "a",
     returnType = "Lr0/g;",
     parameters = listOf("Lr0/g;"),
+)
+
+// Plus Messenger 13.2.1.0 AppCompat EditText receive-content callback.
+// DEX: androidx.appcompat.widget.l implements Ls0/b0 and receives Ls0/d;.
+val TelegramPlusRichHtmlPasteReceiveContentFingerprint = Fingerprint(
+    definingClass = "Landroidx/appcompat/widget/l;",
+    name = "a",
+    returnType = "Ls0/d;",
+    parameters = listOf("Ls0/d;"),
 )
 
 val TelegramR8SendTypingNormalFingerprint = Fingerprint(
