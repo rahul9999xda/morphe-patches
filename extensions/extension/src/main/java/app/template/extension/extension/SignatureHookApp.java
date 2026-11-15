@@ -1,4 +1,4 @@
-RefactorRpackage app.template.extension.extension;
+package app.template.extension.extension;
 
 import android.app.Application;
 import android.content.pm.PackageInfo;
