@@ -153,9 +153,9 @@ public final class MorpheSettingsActivity extends Activity {
         // palette. This keeps text, controls, status/navigation bars and dialogs in
         // the same color family as the host Settings screen.
         colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
-        colorPrimary = resolveThemeColor(android.R.attr.textColorPrimary, 0xff171717);
+        colorPrimary = Color.BLACK; // Keep Morphe Settings typography neutral black, not the host magenta accent.
         colorSecondary = resolveThemeColor(android.R.attr.textColorSecondary, 0xff666666);
-        colorAccent = resolveThemeColor(android.R.attr.colorAccent, 0xff3390ec);
+        colorAccent = 0xff008577; // Telegram-style teal for controls and active rules.
         colorHint = resolveThemeColor(android.R.attr.textColorHint, colorSecondary);
         boolean dark = isColorDark(colorBackground);
         colorSurface = dark ? blend(colorBackground, Color.WHITE, 0.08f) : Color.WHITE;
@@ -802,7 +802,7 @@ public final class MorpheSettingsActivity extends Activity {
             LinearLayout.LayoutParams detailsParams = params(-1, -2);
             detailsParams.topMargin = dp(5);
             item.addView(details, detailsParams);
-            TextView state = label(rule.isEnabled() ? "Rule is active" : "Rule is paused", rule.isEnabled() ? colorAccent : colorSecondary);
+            TextView state = label(rule.isEnabled() ? "Rule is active" : "Rule is paused", rule.isEnabled() ? 0xff008577 : 0xffff9800);
             state.setTag("rule_state_" + rule.getId());
             state.setTextSize(12);
             state.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
