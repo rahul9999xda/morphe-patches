@@ -88,8 +88,7 @@ internal val injectSignatureHookAppPatch = resourcePatch {
  *
  * **What it does:**
  * 1. Extracts the original APK's signing certificate and Base64-encodes it (auto).
- * 2. Triggers [SignatureHookApp] initialization from the existing Application
- *    subclass without changing that subclass's superclass. It replaces
+ * 2. Injects [SignatureHookApp] as the Application superclass — it replaces
  *    `PackageInfo.CREATOR` (a Parcel deserializer) with a proxy that swaps the
  *    re-signed APK's certificate back to the original one at runtime.
  * 3. This intercepts ALL signature reads (via PackageManager, direct Parcel unpacking,
@@ -166,33 +165,14 @@ val packageNameOption by stringOption(
 
         val hookClass = SignatureHookAppStaticInitFingerprint.originalClassDef
 
-        // Do NOT re-parent an existing Application subclass to SignatureHookApp.
-        // Real applications commonly call invoke-super Application.onCreate() in
-        // their Application subclass. Re-parenting inserts an intermediate class
-        // and can make that existing lifecycle call fail verification on ART.
-        // Trigger SignatureHookApp's <clinit> instead, while preserving the host
-        // class hierarchy and every original lifecycle method.
-        var initializedFrom = 0
+        // For apps that already have a custom Application subclass, redirect their superclass
+        // to SignatureHookApp so the static initializer fires without replacing app logic.
         classDefForEach { classDef ->
-            if (classDef.type == hookClass.type ||
-                classDef.superclass != "Landroid/app/Application;") return@classDefForEach
-
-            val mutableClass = mutableClassDefBy(classDef)
-            val classInitializer = mutableClass.methods.firstOrNull {
-                it.name == "<clinit>" && it.parameters.isEmpty()
-            } ?: return@classDefForEach
-
-            classInitializer.addInstructions(
-                0,
-                "invoke-static {}, $EXTENSION_CLASS->initialize()V",
-            )
-            initializedFrom++
+            if (classDef != hookClass && classDef.superclass == "Landroid/app/Application;") {
+                mutableClassDefBy(classDef).setSuperClass(hookClass.type)
+            }
         }
 
-        if (initializedFrom == 0 && extractedPackageName.isNotBlank()) {
-            println("Spoof signature: no existing Application <clinit> found; signature hook may not initialize for this app.")
-        }
-
-        println("Spoof signature: package=$packageName, cert=${signature.take(20)}...; preserved Application superclass for $initializedFrom class(es).")
+        println("Spoof signature: package=$packageName, cert=${signature.take(20)}...")
     }
 }
