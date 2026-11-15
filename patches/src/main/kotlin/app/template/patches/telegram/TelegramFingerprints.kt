@@ -511,15 +511,6 @@ val MarkMessagesAsDeletedFingerprint2 = Fingerprint(
     parameters = listOf("J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I"),
 )
 
-// Telegram Web 13.2.2 build 73039 R8 mapping of the same storage operation.
-// DEX audit confirms ds.P0 has the exact legacy markMessagesAsDeleted descriptor.
-val TelegramWebR8MarkMessagesAsDeletedFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/ds;",
-    name = "P0",
-    returnType = "Ljava/util/ArrayList;",
-    parameters = listOf("J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I"),
-)
-
 // Telegram/Web body signatures are confirmed. The Plus descriptor is reference-level only in
 // the supplied APK; omit accessFlags but do not treat this as a confirmed Plus patch target.
 val DeleteMessagesByPushFingerprint = Fingerprint(
@@ -1671,6 +1662,27 @@ val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
     // its override delegates paste to AppCompat receive-content before super.
     definingClass = "Landroidx/appcompat/widget/l;",
     name = "onTextContextMenuItem", returnType = "Z", parameters = listOf("I"),
+)
+
+
+// R8 13.2.2 / Plus 13.2.1 remote-push deletion handler. The owner and method
+// signature are stable across the three supplied APKs; the notification-controller
+// call inside it is variant-specific and is validated by AntiDeletePatch.
+val TelegramR8PushRemoteMessageDeleteFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/PushListenerController;",
+    name = "lambda$processRemoteMessage$6",
+    returnType = "V",
+    parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;", "J"),
+)
+
+// Android and Web 13.2.2 receive-content path on the same R8 EditText subclass.
+// This is separate from onTextContextMenuItem: AndroidX can deliver rich ClipData
+// directly through this method without invoking the context-menu override.
+val TelegramR8RichHtmlPasteReceiveContentFingerprint = Fingerprint(
+    definingClass = "Lm/s;",
+    name = "a",
+    returnType = "Lr0/g;",
+    parameters = listOf("Lr0/g;"),
 )
 
 val TelegramR8SendTypingNormalFingerprint = Fingerprint(

@@ -19,11 +19,13 @@ import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFin
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
-import app.template.patches.telegram.TelegramWebR8MarkMessagesAsDeletedFingerprint
 import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
+import app.template.patches.telegram.TelegramR8PushRemoteMessageDeleteFingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -125,30 +127,6 @@ val telegramAntiDeletePatch = bytecodePatch(
             // outgoing message is not distinguishable from a peer deletion in the
             // TL_updateDelete* payload (IDs only), so author-aware filtering for that
             // cross-device case is deliberately not claimed.
-            // Telegram Web 13.2.2 has an additional storage-side path for normal/private
-            // delete updates. Its R8 method ds.P0 is the exact obfuscated counterpart of
-            // the legacy markMessagesAsDeleted(J, ArrayList, Z, Z, I, I) method.
-            // Preserve the legacy p4==0 guard: remote deletions are ignored, while the
-            // other flag path (including local deletion handling) continues unchanged.
-            if (currentR8UpdateMethod.definingClass == "Lorg/telegram/messenger/sp;") {
-                val storageDeleteMethod = requireNotNull(
-                    TelegramWebR8MarkMessagesAsDeletedFingerprint.methodOrNull
-                ) {
-                    "Failed to match Telegram Web 13.2.2 R8 storage deletion method ds.P0"
-                }
-                storageDeleteMethod.addInstructions(
-                    0,
-                    """
-                        if-nez p4, :morphe_web_anti_delete_storage_continue
-                        new-instance v0, Ljava/util/ArrayList;
-                        invoke-direct {v0}, Ljava/util/ArrayList;-><init>()V
-                        return-object v0
-                        :morphe_web_anti_delete_storage_continue
-                        nop
-                    """,
-                )
-            }
-
             val instructions = requireNotNull(currentR8UpdateMethod.implementation) {
                 "R8 MessagesController update-array method has no implementation"
             }.instructions.toList()
@@ -224,6 +202,55 @@ val telegramAntiDeletePatch = bytecodePatch(
                     "invoke-virtual {${registers.joinToString(", ") { "v$it" }}}, ${mapReference.definingClass}->l(J)V",
                 )
             }
+
+            // Remote MESSAGE_DELETED push payloads take a second route that bypasses
+            // N3/Bh: PushListenerController parses the push's `messages` field and
+            // directly asks NotificationsController to remove those IDs. Suppress
+            // only the notification-removal call whose boolean argument is false
+            // inside this handler. The true-flag READ_REACTION branch is deliberately
+            // left intact, as are the storage/update callbacks and pts processing.
+            val pushDeleteMethod = requireNotNull(TelegramR8PushRemoteMessageDeleteFingerprint.methodOrNull) {
+                "Failed to match PushListenerController.lambda\$processRemoteMessage\$6(String, String, long)"
+            }
+            val notificationCall = when (currentR8UpdateMethod.definingClass) {
+                "Lorg/telegram/messenger/wp;" -> Triple(
+                    "Lorg/telegram/messenger/nt;", "M", listOf("La0/h;", "Z"),
+                )
+                "Lorg/telegram/messenger/sp;" -> Triple(
+                    "Lorg/telegram/messenger/kt;", "M", listOf("La0/h;", "Z"),
+                )
+                "Lorg/telegram/messenger/ko0;" -> Triple(
+                    "Lorg/telegram/messenger/f31;", "p1", listOf("Lu/k;", "Z"),
+                )
+                else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
+            }
+            val pushInstructions = requireNotNull(pushDeleteMethod.implementation) {
+                "PushListenerController remote-message handler has no implementation"
+            }.instructions.toList()
+            val notificationCallIndexes = pushInstructions.indices.filter { index ->
+                val reference = (pushInstructions[index] as? ReferenceInstruction)?.reference as? MethodReference
+                reference?.definingClass == notificationCall.first &&
+                    reference.name == notificationCall.second &&
+                    reference.parameterTypes == notificationCall.third && reference.returnType == "V"
+            }
+            require(notificationCallIndexes.size == 2) {
+                "Expected the MESSAGE_DELETED and READ_REACTION notification calls in push handler; " +
+                    "found ${notificationCallIndexes.size} for ${notificationCall.first}->${notificationCall.second}"
+            }
+            val messageDeletedNotificationIndexes = notificationCallIndexes.filter { index ->
+                val registers = invokeRegisters(pushInstructions[index]) ?: return@filter false
+                val flagRegister = registers.lastOrNull() ?: return@filter false
+                val previous: Instruction = pushInstructions.getOrNull(index - 1) ?: return@filter false
+                val constant = previous as? NarrowLiteralInstruction ?: return@filter false
+                val destination = previous as? OneRegisterInstruction ?: return@filter false
+                previous.opcode == Opcode.CONST_4 && destination.registerA == flagRegister &&
+                    constant.narrowLiteral == 0
+            }
+            require(messageDeletedNotificationIndexes.size == 1) {
+                "Expected exactly one false-flag MESSAGE_DELETED notification call; " +
+                    "found ${messageDeletedNotificationIndexes.size}"
+            }
+            pushDeleteMethod.replaceInstruction(messageDeletedNotificationIndexes.single(), "nop")
         } else {
             // Historical named-class and Plus variants retain their original
             // independently audited delete worker and storage hook.

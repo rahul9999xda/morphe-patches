@@ -10,13 +10,13 @@ import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteCurrentFi
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPastePlusFingerprint
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
-import app.template.patches.telegram.TelegramR8RichHtmlPasteWebFingerprint
 import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
+import app.template.patches.telegram.TelegramR8RichHtmlPasteReceiveContentFingerprint
 
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
     name = "Use normal paste for Rich HTML clipboard content",
-    description = "Consumes Android paste actions and inserts clipboard content as plain text, bypassing rich HTML receive-content handling.",
+    description = "Converts clipboard paste to plain text before inserting it into Telegram's composer.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -29,18 +29,15 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
         // Android + Web: m/s extends android.widget.EditText and intercepts
         // paste via AndroidX receive-content; Plus: AppCompat l extends EditText
         // and calls androidx.appcompat.widget.x.b before the superclass.
-        // PlainTextPaste consumes both Android paste menu actions and inserts a
-        // plain CharSequence. It must not return false for a recognized paste action:
-        // false would fall through to AndroidX's rich receive-content implementation.
+        // PlainTextPaste converts ClipData items to String and replaces only the
+        // current selection, so paste retains text but discards HTML formatting.
         // Android and Web intentionally share the same current DEX owner/method,
         // so list that fingerprint once to avoid treating the duplicate declaration
         // as two separate matches.
         val currentPasteMethods = listOf(
             TelegramR8RichHtmlPasteNormalFingerprint,
-            TelegramR8RichHtmlPasteWebFingerprint,
             TelegramPlus13111RichHtmlPasteFingerprint,
         ).mapNotNull { it.methodOrNull }
-            .distinctBy { "${it.definingClass}->${it.name}(${it.parameterTypes.joinToString()})${it.returnType}" }
         require(currentPasteMethods.size <= 1) {
             "Multiple current EditText paste handlers matched; refusing an ambiguous Rich HTML paste patch"
         }
@@ -58,6 +55,28 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                     :morphe_rich_paste_continue
                 """,
             )
+            // Android/Web also receive clipboard content through AndroidX's
+            // receive-content callback. Intercept that path separately because
+            // it can bypass onTextContextMenuItem() entirely (for example, when
+            // the platform delivers rich ClipData directly to the EditText).
+            if (currentPasteMethod.definingClass == "Lm/s;") {
+                val receiveContentMethod = requireNotNull(
+                    TelegramR8RichHtmlPasteReceiveContentFingerprint.methodOrNull,
+                ) {
+                    "Android/Web rich paste receive-content method Lm/s;->a(Lr0/g;)Lr0/g; was not found"
+                }
+                receiveContentMethod.addInstructions(
+                    0,
+                    """
+                        invoke-static {p0, p1}, Lapp/template/extension/telegram/PlainTextPaste;->handleReceiveContent(Landroid/widget/EditText;Ljava/lang/Object;)Z
+                        move-result v0
+                        if-eqz v0, :morphe_rich_receive_content_continue
+                        const/4 v0, 0x0
+                        return-object v0
+                        :morphe_rich_receive_content_continue
+                    """,
+                )
+            }
         } else {
             // Preserve support for older named releases whose composer still
             // exposes a dedicated handleRichHtmlPaste() helper.
