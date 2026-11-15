@@ -11,8 +11,6 @@ import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.patch.stringOption
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
-import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import org.w3c.dom.Element
 import java.io.File
 
@@ -90,7 +88,8 @@ internal val injectSignatureHookAppPatch = resourcePatch {
  *
  * **What it does:**
  * 1. Extracts the original APK's signing certificate and Base64-encodes it (auto).
- * 2. Injects [SignatureHookApp] as the Application superclass — it replaces
+ * 2. Triggers [SignatureHookApp] initialization from the existing Application
+ *    subclass without changing that subclass's superclass. It replaces
  *    `PackageInfo.CREATOR` (a Parcel deserializer) with a proxy that swaps the
  *    re-signed APK's certificate back to the original one at runtime.
  * 3. This intercepts ALL signature reads (via PackageManager, direct Parcel unpacking,
@@ -167,49 +166,33 @@ val packageNameOption by stringOption(
 
         val hookClass = SignatureHookAppStaticInitFingerprint.originalClassDef
 
-        // For apps that already have a custom Application subclass, redirect their superclass
-        // to SignatureHookApp so the static initializer fires without replacing app logic.
-        val isPlusApk = extractedPackageName == "org.telegram.plus"
-        var plusApplicationConstructorsRewritten = 0
+        // Do NOT re-parent an existing Application subclass to SignatureHookApp.
+        // Real applications commonly call invoke-super Application.onCreate() in
+        // their Application subclass. Re-parenting inserts an intermediate class
+        // and can make that existing lifecycle call fail verification on ART.
+        // Trigger SignatureHookApp's <clinit> instead, while preserving the host
+        // class hierarchy and every original lifecycle method.
+        var initializedFrom = 0
         classDefForEach { classDef ->
-            if (classDef != hookClass && classDef.superclass == "Landroid/app/Application;") {
-                val mutableClass = mutableClassDefBy(classDef)
-                mutableClass.setSuperClass(hookClass.type)
+            if (classDef.type == hookClass.type ||
+                classDef.superclass != "Landroid/app/Application;") return@classDefForEach
 
-                // Plus 13.2.2.1's obfuscated Application class z0 invokes
-                // Application.<init>() directly. Once its superclass becomes
-                // SignatureHookApp, that direct constructor reference must be
-                // redirected to SignatureHookApp.<init>() or ART verification
-                // rejects the class. Keep the existing Telegram/Web bytecode
-                // path untouched; only rewrite the Plus package's constructor.
-                if (isPlusApk) {
-                    mutableClass.methods.filter { it.name == "<init>" }.forEach { constructor ->
-                        val constructorCall = constructor.implementation?.instructions
-                            ?.indexOfFirst { instruction ->
-                                if (instruction.opcode != Opcode.INVOKE_DIRECT) return@indexOfFirst false
-                                val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
-                                reference != null &&
-                                    reference.definingClass == "Landroid/app/Application;" &&
-                                    reference.name == "<init>" && reference.parameterTypes.isEmpty() &&
-                                    reference.returnType == "V"
-                            } ?: -1
-                        if (constructorCall >= 0) {
-                            constructor.replaceInstruction(
-                                constructorCall,
-                                "invoke-direct {p0}, $EXTENSION_CLASS-><init>()V",
-                            )
-                            plusApplicationConstructorsRewritten++
-                        }
-                    }
-                }
-            }
-        }
-        if (isPlusApk) {
-            require(plusApplicationConstructorsRewritten > 0) {
-                "Plus Application superclass was changed but no Application.<init>() call was redirected"
-            }
+            val mutableClass = mutableClassDefBy(classDef)
+            val classInitializer = mutableClass.methods.firstOrNull {
+                it.name == "<clinit>" && it.parameters.isEmpty()
+            } ?: return@classDefForEach
+
+            classInitializer.addInstructions(
+                0,
+                "invoke-static {}, $EXTENSION_CLASS->initialize()V",
+            )
+            initializedFrom++
         }
 
-        println("Spoof signature: package=$packageName, cert=${signature.take(20)}...")
+        if (initializedFrom == 0 && extractedPackageName.isNotBlank()) {
+            println("Spoof signature: no existing Application <clinit> found; signature hook may not initialize for this app.")
+        }
+
+        println("Spoof signature: package=$packageName, cert=${signature.take(20)}...; preserved Application superclass for $initializedFrom class(es).")
     }
 }

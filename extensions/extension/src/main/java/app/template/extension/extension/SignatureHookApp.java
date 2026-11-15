@@ -22,15 +22,19 @@ public class SignatureHookApp extends Application {
         String packageName = "<package-name>";
         String signature = "<signature>";
 
-        // Signature spoofing is optional compatibility behavior. Android releases may
-        // make PackageInfo.CREATOR or Parcel internals non-writable/hidden. Never let a
-        // failed framework reflection operation abort Application class initialization
-        // (which would prevent the host app from reaching its own onCreate()).
+        // Signature spoofing is optional compatibility behavior. Android releases
+        // may make PackageInfo.CREATOR or Parcel internals non-writable/hidden.
+        // Never let failed framework reflection abort host Application startup.
         try {
             killPackageManager(packageName, signature);
         } catch (Throwable ignored) {
-            // Fail open: the host application must still start normally.
+            // Fail open: preserve normal host startup if spoofing is blocked.
         }
+    }
+
+    /** Triggers this class initializer without becoming the host Application superclass. */
+    public static void initialize() {
+        // Intentionally empty. Calling this method initializes the class first.
     }
 
     private static void killPackageManager(String packageName, String signature) {
