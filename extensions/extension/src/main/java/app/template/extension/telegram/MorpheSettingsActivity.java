@@ -152,7 +152,11 @@ public final class MorpheSettingsActivity extends Activity {
         // Follow Telegram's active theme instead of forcing a separate monochrome
         // palette. This keeps text, controls, status/navigation bars and dialogs in
         // the same color family as the host Settings screen.
-        colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
+        int hostBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
+        // Telegram's light Settings uses a #FAFAFA page with distinct white rounded
+        // cards. Some Telegram forks report pure white as colorBackground; normalize
+        // light mode so the section cards remain visibly separated from the page.
+        colorBackground = isColorDark(hostBackground) ? hostBackground : 0xfffafafa;
         // Use a fixed Telegram-style neutral typography palette so no inherited host magenta
         // text colors leak into Morphe Settings. Keep teal controls and rule states.
         colorPrimary = 0xff212121;
