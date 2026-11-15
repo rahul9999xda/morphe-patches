@@ -290,7 +290,7 @@ val telegramAntiDeletePatch = bytecodePatch(
                     val constant = previous as? NarrowLiteralInstruction
                     val destination = previous as? OneRegisterInstruction
                     require(previous.opcode == Opcode.CONST_4 && destination?.registerA == flagRegister &&
-                        constant?.narrowLiteral == 1L) {
+                        constant?.narrowLiteral == 1) {
                         "Web push notification call no longer matches the audited single-call shape"
                     }
                     index
