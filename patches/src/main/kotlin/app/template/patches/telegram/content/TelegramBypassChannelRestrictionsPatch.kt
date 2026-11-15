@@ -23,10 +23,14 @@ import app.template.patches.telegram.CheckCanOpenChat4Web1303Fingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonNormalFingerprint
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonWebFingerprint
+import app.template.patches.telegram.TelegramR8IsSensitiveNormalFingerprint
+import app.template.patches.telegram.TelegramR8IsSensitiveWebFingerprint
 import app.template.patches.telegram.TelegramR8ShowSensitiveContentNormalFingerprint
 import app.template.patches.telegram.TelegramR8ShowSensitiveContentWebFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSensitiveNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSensitiveWebFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsHiddenSensitiveNormalFingerprint
+import app.template.patches.telegram.TelegramR8MessageObjectIsHiddenSensitiveWebFingerprint
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertNormalFingerprint
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertWebFingerprint
 import app.template.patches.telegram.TelegramR8CheckCanOpenChat4NormalFingerprint
@@ -269,54 +273,126 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
             "Failed to match Telegram/Plus fingerprint for $methodName"
         }
 
-        // Telegram/Web 13.2.2 R8 owners and method names are recovered from the
-        // local DEX bodies. The previous named-class hooks are kept below for legacy targets; Plus has separate current R8 hooks
-        // and legacy APKs, but must not be used as fallbacks for these R8 builds.
-        val currentGetRestrictionReason =
-            TelegramR8GetRestrictionReasonNormalFingerprint.methodOrNull
-                ?: TelegramR8GetRestrictionReasonWebFingerprint.methodOrNull
-                ?: TelegramPlusR8GetRestrictionReasonFingerprint.methodOrNull
-        if (currentGetRestrictionReason != null) {
-            currentGetRestrictionReason.addInstructions(0, """
+        // Resolve a single complete current-R8 variant. Do not mix fingerprints
+        // from Android, Web and Plus: the obfuscated owners are different even
+        // where method names happen to be the same.
+        val normalGetRestrictionReason = TelegramR8GetRestrictionReasonNormalFingerprint.methodOrNull
+        val webGetRestrictionReason = TelegramR8GetRestrictionReasonWebFingerprint.methodOrNull
+        val plusGetRestrictionReason = TelegramPlusR8GetRestrictionReasonFingerprint.methodOrNull
+        val matchedCurrentVariants = listOfNotNull(
+            normalGetRestrictionReason?.let { "android" },
+            webGetRestrictionReason?.let { "web" },
+            plusGetRestrictionReason?.let { "plus" },
+        )
+        require(matchedCurrentVariants.size <= 1) {
+            "Multiple current R8 Bypass Channel Restrictions variants matched: $matchedCurrentVariants"
+        }
+        val currentVariant = matchedCurrentVariants.singleOrNull()
+        if (currentVariant != null) {
+            val getRestrictionReason = when (currentVariant) {
+                "android" -> requireNotNull(normalGetRestrictionReason)
+                "web" -> requireNotNull(webGetRestrictionReason)
+                else -> requireNotNull(plusGetRestrictionReason)
+            }
+            getRestrictionReason.addInstructions(0, """
                 const/4 v0, 0x0
                 return-object v0
             """)
-            // Plus has a distinct, DEX-verified restriction-list predicate. The
-            // Android/Web class has no equivalent ArrayList predicate: its method
-            // named s(ArrayList)Z is the folder-peer update handler and must remain
-            // untouched to preserve Telegram's dialog/folder update processing.
-            TelegramPlusR8IsSensitiveFingerprint.methodOrNull?.addInstructions(0, """
+
+            val isSensitive = when (currentVariant) {
+                "android" -> requireNotNull(TelegramR8IsSensitiveNormalFingerprint.methodOrNull) {
+                    "Missing Android R8 MessagesController.isSensitive(ArrayList)Z"
+                }
+                "web" -> requireNotNull(TelegramR8IsSensitiveWebFingerprint.methodOrNull) {
+                    "Missing Web R8 MessagesController.isSensitive(ArrayList)Z"
+                }
+                else -> requireNotNull(TelegramPlusR8IsSensitiveFingerprint.methodOrNull) {
+                    "Missing Plus R8 MessagesController.isSensitive(ArrayList)Z"
+                }
+            }
+            isSensitive.addInstructions(0, """
                 const/4 v0, 0x0
                 return v0
             """)
-            val currentMessageIsSensitive =
-                TelegramR8MessageObjectIsSensitiveNormalFingerprint.methodOrNull
-                    ?: TelegramR8MessageObjectIsSensitiveWebFingerprint.methodOrNull
-                    ?: TelegramPlusR8MessageObjectIsSensitiveFingerprint.methodOrNull
-            requireNotNull(currentMessageIsSensitive) { "Missing R8 MessageObject.isSensitive()Z" }
-                .addInstructions(0, """
+
+            val messageIsSensitive = when (currentVariant) {
+                "android" -> requireNotNull(TelegramR8MessageObjectIsSensitiveNormalFingerprint.methodOrNull) {
+                    "Missing Android R8 MessageObject sensitive predicate"
+                }
+                "web" -> requireNotNull(TelegramR8MessageObjectIsSensitiveWebFingerprint.methodOrNull) {
+                    "Missing Web R8 MessageObject sensitive predicate"
+                }
+                else -> requireNotNull(TelegramPlusR8MessageObjectIsSensitiveFingerprint.methodOrNull) {
+                    "Missing Plus R8 MessageObject sensitive predicate"
+                }
+            }
+            messageIsSensitive.addInstructions(0, """
+                const/4 v0, 0x0
+                return v0
+            """)
+
+            // Telegram/Web expose a second hidden-sensitive predicate. Plus
+            // folds this test into x20.E6(), patched above.
+            if (currentVariant != "plus") {
+                val hiddenSensitive = if (currentVariant == "android") {
+                    requireNotNull(TelegramR8MessageObjectIsHiddenSensitiveNormalFingerprint.methodOrNull) {
+                        "Missing Android R8 MessageObject hidden-sensitive predicate"
+                    }
+                } else {
+                    requireNotNull(TelegramR8MessageObjectIsHiddenSensitiveWebFingerprint.methodOrNull) {
+                        "Missing Web R8 MessageObject hidden-sensitive predicate"
+                    }
+                }
+                hiddenSensitive.addInstructions(0, """
                     const/4 v0, 0x0
                     return v0
                 """)
-            val currentShowSensitiveContent =
-                TelegramR8ShowSensitiveContentNormalFingerprint.methodOrNull
-                    ?: TelegramR8ShowSensitiveContentWebFingerprint.methodOrNull
-                    ?: TelegramPlusR8ShowSensitiveContentFingerprint.methodOrNull
-            requireNotNull(currentShowSensitiveContent) { "Missing R8 showSensitiveContent()Z" }
-                .addInstructions(0, """
-                    const/4 v0, 0x1
-                    return v0
-                """)
-            (TelegramR8ShowCantOpenAlertNormalFingerprint.methodOrNull
-                ?: TelegramR8ShowCantOpenAlertWebFingerprint.methodOrNull)
-                ?.addInstructions(0, "return-void")
-            (TelegramR8CheckCanOpenChat4NormalFingerprint.methodOrNull
-                ?: TelegramR8CheckCanOpenChat4WebFingerprint.methodOrNull
-                ?: TelegramPlusR8CheckCanOpenChat4Fingerprint.methodOrNull)
-                ?.addInstructions(0, """
-                    const/4 v0, 0x1
-                    return v0
-                """)
+            }
+
+            val showSensitiveContent = when (currentVariant) {
+                "android" -> requireNotNull(TelegramR8ShowSensitiveContentNormalFingerprint.methodOrNull) {
+                    "Missing Android R8 showSensitiveContent()Z"
+                }
+                "web" -> requireNotNull(TelegramR8ShowSensitiveContentWebFingerprint.methodOrNull) {
+                    "Missing Web R8 showSensitiveContent()Z"
+                }
+                else -> requireNotNull(TelegramPlusR8ShowSensitiveContentFingerprint.methodOrNull) {
+                    "Missing Plus R8 showSensitiveContent()Z"
+                }
+            }
+            showSensitiveContent.addInstructions(0, """
+                const/4 v0, 0x1
+                return v0
+            """)
+
+            if (currentVariant != "plus") {
+                val showCantOpenAlert = if (currentVariant == "android") {
+                    requireNotNull(TelegramR8ShowCantOpenAlertNormalFingerprint.methodOrNull) {
+                        "Missing Android R8 showCantOpenAlert(String, ActionBar)"
+                    }
+                } else {
+                    requireNotNull(TelegramR8ShowCantOpenAlertWebFingerprint.methodOrNull) {
+                        "Missing Web R8 showCantOpenAlert(String, ActionBar)"
+                    }
+                }
+                showCantOpenAlert.addInstructions(0, "return-void")
+            }
+
+            val checkCanOpenChat = when (currentVariant) {
+                "android" -> requireNotNull(TelegramR8CheckCanOpenChat4NormalFingerprint.methodOrNull) {
+                    "Missing Android R8 checkCanOpenChat/4"
+                }
+                "web" -> requireNotNull(TelegramR8CheckCanOpenChat4WebFingerprint.methodOrNull) {
+                    "Missing Web R8 checkCanOpenChat/4"
+                }
+                else -> requireNotNull(TelegramPlusR8CheckCanOpenChat4Fingerprint.methodOrNull) {
+                    "Missing Plus R8 checkCanOpenChat/4"
+                }
+            }
+            checkCanOpenChat.addInstructions(0, """
+                const/4 v0, 0x1
+                return v0
+            """)
             return@execute
         }
 

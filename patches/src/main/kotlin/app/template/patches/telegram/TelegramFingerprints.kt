@@ -1670,7 +1670,7 @@ val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
 // call inside it is variant-specific and is validated by AntiDeletePatch.
 val TelegramR8PushRemoteMessageDeleteFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/PushListenerController;",
-    name = "lambda$processRemoteMessage$6",
+    name = "lambda\$processRemoteMessage\$6",
     returnType = "V",
     parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;", "J"),
 )
