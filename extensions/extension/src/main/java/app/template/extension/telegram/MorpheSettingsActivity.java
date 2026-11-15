@@ -153,10 +153,12 @@ public final class MorpheSettingsActivity extends Activity {
         // palette. This keeps text, controls, status/navigation bars and dialogs in
         // the same color family as the host Settings screen.
         colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
-        colorPrimary = Color.BLACK; // Keep Morphe Settings typography neutral black, not the host magenta accent.
-        colorSecondary = resolveThemeColor(android.R.attr.textColorSecondary, 0xff666666);
+        // Use a fixed dark-grey typography palette so no inherited host magenta
+        // text colors leak into Morphe Settings. Keep teal controls and rule states.
+        colorPrimary = 0xff424242;
+        colorSecondary = 0xff616161;
         colorAccent = 0xff008577; // Telegram-style teal for controls and active rules.
-        colorHint = resolveThemeColor(android.R.attr.textColorHint, colorSecondary);
+        colorHint = 0xff757575;
         boolean dark = isColorDark(colorBackground);
         colorSurface = dark ? blend(colorBackground, Color.WHITE, 0.08f) : Color.WHITE;
         final int background = colorBackground;
