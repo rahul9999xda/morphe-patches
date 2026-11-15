@@ -201,13 +201,29 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
     }
 
     public synchronized void recordAutomation(String ruleId) { increment(ruleId, "automation"); }
-    /** Counts a native forward request accepted by Telegram's local send queue, not server delivery. */
-    public synchronized void recordForwardQueued(String ruleId) { increment(ruleId, "forwardQueued"); }
-    /** Counts a native copy/send request accepted by Telegram's local send queue, not server delivery. */
-    public synchronized void recordCopyQueued(String ruleId) { increment(ruleId, "copyQueued"); }
-    /** Reserved for a future server-acknowledged result callback; not incremented on local enqueue. */
+    /** Counts a forward operation accepted by Telegram's native send pipeline. */
     public synchronized void recordForwarded(String ruleId) { increment(ruleId, "forwarded"); }
+    /** Counts a copy operation accepted by Telegram's native send pipeline. */
     public synchronized void recordCopied(String ruleId) { increment(ruleId, "copied"); }
+
+    /** Roll back a previously counted operation if an adapter later reports its send failure. */
+    public synchronized void rollbackDeliveryCount(String ruleId, boolean copy) {
+        decrement(ruleId, copy ? "copied" : "forwarded");
+    }
+
+    private void decrement(String ruleId, String metric) {
+        if (ruleId == null || ruleId.trim().isEmpty()) return;
+        synchronized (preferences) {
+            try {
+                JSONObject root = new JSONObject(preferences.getString("rule_stats", "{}"));
+                JSONObject values = root.optJSONObject(ruleId);
+                if (values == null) return;
+                long current = values.optLong(metric, 0L);
+                if (current > 0) values.put(metric, current - 1);
+                preferences.edit().putString("rule_stats", root.toString()).apply();
+            } catch (Throwable ignored) { }
+        }
+    }
 
     /** Reset this rule's counters only; rules and statistics for other IDs remain untouched. */
     public synchronized void resetStats(String ruleId) {

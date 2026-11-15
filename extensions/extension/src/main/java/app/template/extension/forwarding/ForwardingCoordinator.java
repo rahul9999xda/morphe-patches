@@ -93,22 +93,8 @@ public final class ForwardingCoordinator {
                 }
             });
         } catch (RuntimeException rejected) {
-            // The event queue can reject before the worker has matched rules. Attribute
-            // this lost event to every enabled rule that would have matched it, rather
-            // than updating only a global status string (which left per-rule Failed at 0).
-            try {
-                List<ForwardingRule> rules = store.loadRules();
-                if (rules != null && store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore prefs =
-                            (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
-                    for (ForwardingRule rule : rules) {
-                        if (rule == null) continue;
-                        try {
-                            if (ForwardingRuleMatcher.matches(rule, message)) prefs.recordQueueFailure(rule.getId());
-                        } catch (Throwable ignored) { }
-                    }
-                }
-            } catch (Throwable ignored) { }
+            // Bounded queue saturation is visible and counted. No recent/dedupe key is
+            // claimed until dispatch, so a later incoming update can retry this message.
             reportFailure(null, "Automation queue is full; incoming event was not queued", rejected);
         }
     }
@@ -141,41 +127,46 @@ public final class ForwardingCoordinator {
             }
         }
 
-        final AtomicBoolean queued = new AtomicBoolean(false);
+        final AtomicBoolean counted = new AtomicBoolean(false);
         final AtomicBoolean completed = new AtomicBoolean(false);
         TelegramMessageGateway.ResultCallback callback = new TelegramMessageGateway.ResultCallback() {
-            @Override public void onQueued() {
-                if (!queued.compareAndSet(false, true)) return;
-                // This is a local Telegram queue acceptance, not a server delivery ACK.
-                // Keep a distinct metric so the settings screen never overstates delivery.
-                if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) {
-                    if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                        try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordCopyQueued(rule.getId()); }
-                        catch (Throwable ignored) { }
-                    }
-                } else if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                    try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordForwardQueued(rule.getId()); }
-                    catch (Throwable ignored) { }
-                }
-                inFlight.remove(key);
-            }
-            @Override public void onSuccess() {
-                if (!completed.compareAndSet(false, true)) return;
-                inFlight.remove(key);
+            private void recordDeliveredCount() {
+                if (!counted.compareAndSet(false, true)) return;
                 if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore stats =
+                            (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
                     try {
-                        app.template.extension.telegram.SharedPreferencesForwardingRuleStore stats =
-                                (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
+                        // Current Telegram 13.2.2 native helpers do not expose a server-ACK
+                        // callback for these paths. Their return/dispatch point confirms that
+                        // Telegram accepted the operation for its own send pipeline. Count
+                        // that operation as Forwarded/Copied, never as a separate Queued item.
                         if (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY) stats.recordCopied(rule.getId());
                         else stats.recordForwarded(rule.getId());
                     } catch (Throwable ignored) { }
                 }
-                // Keep recent key after local acceptance to suppress duplicate update delivery.
+            }
+            @Override public void onQueued() {
+                recordDeliveredCount();
+                inFlight.remove(key);
+            }
+            @Override public void onSuccess() {
+                // Some legacy adapters report success without a separate onQueued callback.
+                recordDeliveredCount();
+                if (!completed.compareAndSet(false, true)) return;
+                inFlight.remove(key);
+                // Keep recent key after native acceptance to suppress duplicate update delivery.
             }
             @Override public void onFailure(Throwable error) {
                 if (!completed.compareAndSet(false, true)) return;
                 inFlight.remove(key);
                 synchronized (recentlyDispatched) { recentlyDispatched.remove(key); }
+                if (counted.compareAndSet(true, false)
+                        && store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                    try {
+                        ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store)
+                                .rollbackDeliveryCount(rule.getId(), rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY);
+                    } catch (Throwable ignored) { }
+                }
                 reportFailure(rule.getId(),
                         (rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? "Copy" : "Forward")
                                 + " failed for destination " + destination, error);
