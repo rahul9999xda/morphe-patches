@@ -21,6 +21,11 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     name = "Use normal paste for Rich HTML clipboard content",
     description = "Converts clipboard paste to plain text before inserting it into Telegram's composer.",
 ) {
+    // This patch calls PlainTextPaste from the shared extension DEX. Without
+    // extendWith(), the APK receives invoke-static references to a class that
+    // is not merged into the target APK, which can fail class verification.
+    extendWith("extensions/extension.mpe")
+
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
         TELEGRAM_WEB_COMPATIBILITY,
