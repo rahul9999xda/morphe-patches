@@ -9,6 +9,7 @@ import app.template.patches.telegram.MessageObjectIsMusicFingerprint
 import app.template.patches.telegram.TelegramR8DocumentIsMusicNormalFingerprint
 import app.template.patches.telegram.TelegramR8DocumentIsMusicWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8DocumentIsMusicFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8DocumentIsMusicFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 /**
@@ -33,6 +34,7 @@ val telegramVoiceToMusicPatch = bytecodePatch(
         val currentDocumentClassifier =
             TelegramR8DocumentIsMusicNormalFingerprint.methodOrNull
                 ?: TelegramR8DocumentIsMusicWebFingerprint.methodOrNull
+                ?: TelegramPlus13221R8DocumentIsMusicFingerprint.methodOrNull
                 ?: TelegramPlusR8DocumentIsMusicFingerprint.methodOrNull
 
         if (currentDocumentClassifier != null) {

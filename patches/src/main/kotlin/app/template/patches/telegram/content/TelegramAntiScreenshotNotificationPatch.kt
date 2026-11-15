@@ -11,6 +11,7 @@ import app.template.patches.telegram.SendScreenshotMessageUserFingerprint
 import app.template.patches.telegram.TelegramR8SendScreenshotNotificationNormalFingerprint
 import app.template.patches.telegram.TelegramR8SendScreenshotNotificationWebFingerprint
 import app.template.patches.telegram.TelegramPlusSendScreenshotNotificationFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8SendScreenshotNotificationFingerprint
 
 @Suppress("unused")
 val telegramAntiScreenshotNotificationPatch = bytecodePatch(
@@ -22,12 +23,13 @@ val telegramAntiScreenshotNotificationPatch = bytecodePatch(
     dependsOn(telegramSpoofDependency())
 
     execute {
-        // Telegram/Web 13.2.1 merged the user screenshot-notification helper into
-        // the boolean dispatcher that constructs TL_messages_sendScreenshotNotification.
-        // It must return false (not return-void) to preserve its current descriptor.
+        // Telegram/Web use boolean dispatchers; Plus 13.2.2.1 uses the void
+        // rg1.H4(User, int, Message) sender. The Plus hook returns void before
+        // TL_messages_sendScreenshotNotification is constructed.
         val currentAndroid = TelegramR8SendScreenshotNotificationNormalFingerprint.methodOrNull
         val currentWeb = TelegramR8SendScreenshotNotificationWebFingerprint.methodOrNull
-        val plusCurrent = TelegramPlusSendScreenshotNotificationFingerprint.methodOrNull
+        val plusCurrent = TelegramPlus13221R8SendScreenshotNotificationFingerprint.methodOrNull
+            ?: TelegramPlusSendScreenshotNotificationFingerprint.methodOrNull
 
         require(listOf(currentAndroid, currentWeb, plusCurrent).count { it != null } <= 1) {
             "Ambiguous screenshot-notification dispatcher: more than one target profile matched"

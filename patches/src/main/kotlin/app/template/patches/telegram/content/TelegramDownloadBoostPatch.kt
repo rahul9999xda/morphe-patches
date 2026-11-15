@@ -10,6 +10,7 @@ import app.template.patches.telegram.FileLoadOperationUpdateParamsFingerprint
 import app.template.patches.telegram.TelegramR8FileLoadOperationUpdateParamsNormalFingerprint
 import app.template.patches.telegram.TelegramR8FileLoadOperationUpdateParamsWebFingerprint
 import app.template.patches.telegram.PlusR8FileLoadOperationUpdateParamsFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8FileLoadOperationUpdateParamsFingerprint
 import com.android.tools.smali.dexlib2.Opcode
 
 @Suppress("unused")
@@ -24,13 +25,14 @@ val telegramDownloadBoostPatch = bytecodePatch(
         val currentR8Method =
             TelegramR8FileLoadOperationUpdateParamsNormalFingerprint.methodOrNull
                 ?: TelegramR8FileLoadOperationUpdateParamsWebFingerprint.methodOrNull
-        val plusR8Method = PlusR8FileLoadOperationUpdateParamsFingerprint.methodOrNull
+        val plusR8Method = TelegramPlus13221R8FileLoadOperationUpdateParamsFingerprint.methodOrNull
+            ?: PlusR8FileLoadOperationUpdateParamsFingerprint.methodOrNull
 
         if (currentR8Method != null || plusR8Method != null) {
             val targetMethod = currentR8Method ?: plusR8Method!!
             // Preserve each APK's stock decision tree, then override only its final
-            // chunk/concurrency/CDN fields. Telegram/Web use n/o/p/q; Plus 13.2.1.0
-            // uses q/s/t/v in its verified uc.G0() equivalent. This runs after the
+            // chunk/concurrency/CDN fields. Telegram/Web use n/o/p/q; Plus 13.2.2.1 uses wc.G0(); the older 13.2.1.0
+            // uc.G0() layout remains a separate fallback with the same q/s/t/v fields. This runs after the
             // stock preload/force-small-chunk/experiment branches have completed.
             val implementation = requireNotNull(targetMethod.implementation) {
                 "R8 FileLoadOperation.updateParams has no implementation"
@@ -41,8 +43,8 @@ val telegramDownloadBoostPatch = bytecodePatch(
             require(returnIndex >= 0) { "R8 FileLoadOperation.updateParams has no RETURN_VOID" }
             val owner = targetMethod.definingClass.toString()
             val overrides = if (plusR8Method != null) {
-                // Plus 13.2.1.0 has a different R8 field layout from Telegram/Web.
-                // uc.G0() computes q (chunk bytes), s/t (parallel requests), v (CDN cap).
+                // Plus uses a different R8 field layout from Telegram/Web.
+                // wc.G0() in 13.2.2.1 (uc.G0() in 13.2.1.0) computes q (chunk bytes), s/t (parallel requests), v (CDN cap).
                 """
                     const/high16 v0, 0x100000
                     iput v0, p0, $owner->q:I

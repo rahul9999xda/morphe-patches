@@ -18,10 +18,14 @@ import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaInstanc
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaExpiryNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaExpiryWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8MessageObjectIsSecretMediaStaticFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8MessageObjectIsSecretMediaStaticFingerprint
 import app.template.patches.telegram.TelegramPlusR8MessageObjectIsSecretMediaInstanceFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8MessageObjectIsSecretMediaInstanceFingerprint
 import app.template.patches.telegram.TelegramPlusR8MessageObjectIsSecretMediaExpiryFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8MessageObjectIsSecretMediaExpiryFingerprint
 import app.template.patches.telegram.TelegramR8SecretMediaViewerCloseFingerprint
 import app.template.patches.telegram.TelegramPlusR8SecretMediaViewerCloseFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8SecretMediaViewerCloseFingerprint
 
 private val isSecretMediaInstanceFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessageObject;",
@@ -101,8 +105,11 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             TelegramR8MessageObjectIsSecretMediaInstanceWebFingerprint,
             TelegramR8MessageObjectIsSecretMediaExpiryNormalFingerprint,
             TelegramR8MessageObjectIsSecretMediaExpiryWebFingerprint,
+            TelegramPlus13221R8MessageObjectIsSecretMediaStaticFingerprint,
             TelegramPlusR8MessageObjectIsSecretMediaStaticFingerprint,
+            TelegramPlus13221R8MessageObjectIsSecretMediaInstanceFingerprint,
             TelegramPlusR8MessageObjectIsSecretMediaInstanceFingerprint,
+            TelegramPlus13221R8MessageObjectIsSecretMediaExpiryFingerprint,
             TelegramPlusR8MessageObjectIsSecretMediaExpiryFingerprint,
         ).mapNotNull { it.methodOrNull }
 
@@ -130,6 +137,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
 
         val closeMethods = listOf(
             TelegramR8SecretMediaViewerCloseFingerprint,
+            TelegramPlus13221R8SecretMediaViewerCloseFingerprint,
             TelegramPlusR8SecretMediaViewerCloseFingerprint,
         ).mapNotNull { it.methodOrNull }
         require(closeMethods.size == 1) {
@@ -146,7 +154,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         }
 
         val messageClassifier = currentR8Methods.first { it.name == "l4" || it.name == "A6" }
-        val callbackIndex = if (messageClassifier.definingClass == "Lorg/telegram/messenger/x20;") {
+        val callbackIndex = if (messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")) {
             require(runIndexes.size == 1) {
                 "Expected one Plus close-time Runnable.run() callback, found ${runIndexes.size}"
             }
@@ -171,11 +179,12 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         }
         require(callbackIndex in runIndexes) { "Resolved callback index is not a Runnable.run() call" }
 
-        val replacement = if (messageClassifier.definingClass == "Lorg/telegram/messenger/x20;") {
+        val replacement = if (messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")) {
             // Plus synthetic close animation receives the active MessageObject as p2.
             """
+                if-eqz p1, :morphe_skip_expiry_callback
                 if-eqz p2, :morphe_run_expiry_callback
-                invoke-virtual {p2}, Lorg/telegram/messenger/x20;->A6()Z
+                invoke-virtual {p2}, ${messageClassifier.definingClass}->A6()Z
                 move-result v2
                 if-nez v2, :morphe_skip_expiry_callback
                 :morphe_run_expiry_callback

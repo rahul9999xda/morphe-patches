@@ -13,6 +13,7 @@ import app.template.patches.telegram.AndroidUtilitiesGetCertFingerprintFingerpri
 import app.template.patches.telegram.SafetyNetCheckFingerprint
 import app.template.patches.telegram.TelegramR8ConnectionManagerCertificateFingerprint
 import app.template.patches.telegram.TelegramPlusR8CertificateHashFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8CertificateHashFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -79,14 +80,15 @@ val telegramBypassIntegrityPatch = bytecodePatch(
         // Telegram/Web 13.2.2 no longer contains that named helper or a call-site to it;
         // their SafetyNet JSONObject checks below remain independently patchable.
         val certMethod = AndroidUtilitiesGetCertFingerprintFingerprint.methodOrNull
-        val plusCertMethod = TelegramPlusR8CertificateHashFingerprint.methodOrNull
+        val plusCertMethod = TelegramPlus13221R8CertificateHashFingerprint.methodOrNull
+            ?: TelegramPlusR8CertificateHashFingerprint.methodOrNull
         if (certMethod != null) {
             certMethod.addInstructions(0, """
                 const-string v0, "$certHash"
                 return-object v0
             """)
         } else if (plusCertMethod != null) {
-            // Plus 13.2.1.0 uses m0.g2() for the SHA-256 certificate hash.
+            // Plus 13.2.2.1 uses m0.g2() for the SHA-256 certificate hash.
             // Do not patch m0.f2(): that sibling helper computes SHA-1.
             plusCertMethod.addInstructions(0, """
                 const-string v0, "$certHash"

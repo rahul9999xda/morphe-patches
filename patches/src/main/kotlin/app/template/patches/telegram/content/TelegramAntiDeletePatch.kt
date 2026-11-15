@@ -20,6 +20,7 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8ProcessUpdateArrayFingerprint
 import app.template.patches.telegram.TelegramR8PushRemoteMessageDeleteFingerprint
 import app.template.patches.telegram.TelegramWebR8MarkMessagesAsDeletedFingerprint
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
@@ -106,6 +107,7 @@ val telegramAntiDeletePatch = bytecodePatch(
         val currentR8UpdateMethods = listOf(
             TelegramR8ProcessUpdateArrayNormalFingerprint,
             TelegramR8ProcessUpdateArrayWebFingerprint,
+            TelegramPlus13221R8ProcessUpdateArrayFingerprint,
             TelegramPlusR8ProcessUpdateArrayFingerprint,
         ).mapNotNull { it.methodOrNull }
         require(currentR8UpdateMethods.size <= 1) {
@@ -114,16 +116,17 @@ val telegramAntiDeletePatch = bytecodePatch(
         val currentR8UpdateMethod = currentR8UpdateMethods.singleOrNull()
 
         if (currentR8UpdateMethod != null) {
-            // In Telegram/Web 13.2.2 (Android build 73031 / Web build 73039), and Plus 13.2.1.0 build 22678,
+            // In Telegram/Web 13.2.2 (Android build 73031 / Web build 73039), and Plus 13.2.2.1 build 22718 (with a separate 13.2.1.0 fallback),
             // the old deleteMessagesByPush entry point is folded into the independently fingerprinted update-array
             // dispatcher (N3 for Telegram/Web; Bh for Plus). Do not suppress the whole update
             // (which would stall pts); suppress only the two message-id list appends
             // for TL_updateDeleteMessages and TL_updateDeleteChannelMessages.
             // Scheduled, ephemeral and group-call delete updates remain untouched.
             // Locally initiated deletion uses separate callbacks: Android/Web
-            // MessagesController wp/sp.b0 -> MessagesStorage is/ds.P0; Plus
-            // MessagesController ko0.ob -> MessagesStorage vz0.K7. This hook only
-            // removes remote update IDs from N3/Bh and does not patch those callbacks.
+            // MessagesController wp/sp.b0 -> MessagesStorage is/ds.P0. Plus 13.2.2.1
+            // keeps local delete callbacks separate from mo0.Bh; the legacy 13.2.1.0
+            // storage path remains unchanged. This hook only removes remote update IDs
+            // from N3/Bh and does not patch those callbacks.
             // A deletion initiated on another device for an
             // outgoing message is not distinguishable from a peer deletion in the
             // TL_updateDelete* payload (IDs only), so author-aware filtering for that
@@ -188,7 +191,7 @@ val telegramAntiDeletePatch = bytecodePatch(
             // Telegram/Web use La0/h (f/l, m/n); Plus uses Lu/k (f/l, n/q).
             val expectedMapClass = when (currentR8UpdateMethod.definingClass) {
                 "Lorg/telegram/messenger/wp;", "Lorg/telegram/messenger/sp;" -> "La0/h;"
-                "Lorg/telegram/messenger/ko0;" -> "Lu/k;"
+                "Lorg/telegram/messenger/ko0;", "Lorg/telegram/messenger/mo0;" -> "Lu/k;"
                 else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
             }
             fun invokeRegisters(instruction: Instruction): List<Int>? = when (instruction) {
@@ -244,6 +247,9 @@ val telegramAntiDeletePatch = bytecodePatch(
                 )
                 "Lorg/telegram/messenger/ko0;" -> Triple(
                     "Lorg/telegram/messenger/f31;", "p1", listOf("Lu/k;", "Z"),
+                )
+                "Lorg/telegram/messenger/mo0;" -> Triple(
+                    "Lorg/telegram/messenger/h31;", "p1", listOf("Lu/k;", "Z"),
                 )
                 else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
             }

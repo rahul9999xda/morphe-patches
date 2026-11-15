@@ -26,9 +26,9 @@ object Constants {
         apkFileType = ApkFileType.APK,
         appIconColor = 0x2CA5E0,
         targets = listOf(
-            AppTarget(version = "13.2.1.0", versionCode = 22678),
+            AppTarget(version = "13.2.2.1", versionCode = 22718),
             // Preserve the earlier Plus Messenger target and its independent legacy hooks.
-            AppTarget(version = "13.1.1.0", versionCode = 22621),
+            AppTarget(version = "13.2.1.0", versionCode = 22678),
         )
     )
 

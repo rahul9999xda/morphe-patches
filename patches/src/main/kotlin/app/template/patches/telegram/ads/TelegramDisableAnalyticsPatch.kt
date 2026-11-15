@@ -118,8 +118,10 @@ val telegramDisableAnalyticsPatch = bytecodePatch(
             patchedTargets++
         }
 
-        // Plus: Crashlytics wrapper method names are obfuscated, but the exact descriptors
-        // and method bodies were inspected in the supplied Plus 13.1.1.0 DEX.
+        // Older Plus builds expose these obfuscated Crashlytics wrapper methods.
+        // Plus 13.2.2.1 no longer contains these exact descriptors; its Crashlytics
+        // collection is disabled by the manifest metadata above. Keep the optional
+        // hooks for older Plus releases without broad-matching unrelated Firebase code.
         TelegramPrivacyCrashlyticsSetCollectionFingerprint.methodOrNull?.let { method ->
             method.addInstructions(0, "const/4 p1, 0x0")
             patchedTargets++

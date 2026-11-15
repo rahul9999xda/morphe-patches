@@ -11,6 +11,8 @@ import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.patch.stringOption
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import org.w3c.dom.Element
 import java.io.File
 
@@ -167,9 +169,44 @@ val packageNameOption by stringOption(
 
         // For apps that already have a custom Application subclass, redirect their superclass
         // to SignatureHookApp so the static initializer fires without replacing app logic.
+        val isPlusApk = extractedPackageName == "org.telegram.plus"
+        var plusApplicationConstructorsRewritten = 0
         classDefForEach { classDef ->
             if (classDef != hookClass && classDef.superclass == "Landroid/app/Application;") {
-                mutableClassDefBy(classDef).setSuperClass(hookClass.type)
+                val mutableClass = mutableClassDefBy(classDef)
+                mutableClass.setSuperClass(hookClass.type)
+
+                // Plus 13.2.2.1's obfuscated Application class z0 invokes
+                // Application.<init>() directly. Once its superclass becomes
+                // SignatureHookApp, that direct constructor reference must be
+                // redirected to SignatureHookApp.<init>() or ART verification
+                // rejects the class. Keep the existing Telegram/Web bytecode
+                // path untouched; only rewrite the Plus package's constructor.
+                if (isPlusApk) {
+                    mutableClass.methods.filter { it.name == "<init>" }.forEach { constructor ->
+                        val constructorCall = constructor.implementation?.instructions
+                            ?.indexOfFirst { instruction ->
+                                if (instruction.opcode != Opcode.INVOKE_DIRECT) return@indexOfFirst false
+                                val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+                                reference != null &&
+                                    reference.definingClass == "Landroid/app/Application;" &&
+                                    reference.name == "<init>" && reference.parameterTypes.isEmpty() &&
+                                    reference.returnType == "V"
+                            } ?: -1
+                        if (constructorCall >= 0) {
+                            constructor.replaceInstruction(
+                                constructorCall,
+                                "invoke-direct {p0}, $EXTENSION_CLASS-><init>()V",
+                            )
+                            plusApplicationConstructorsRewritten++
+                        }
+                    }
+                }
+            }
+        }
+        if (isPlusApk) {
+            require(plusApplicationConstructorsRewritten > 0) {
+                "Plus Application superclass was changed but no Application.<init>() call was redirected"
             }
         }
 

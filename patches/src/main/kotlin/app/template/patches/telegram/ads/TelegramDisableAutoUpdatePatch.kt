@@ -9,8 +9,11 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.PlusUpdateButtonUpdateFingerprint
+import app.template.patches.telegram.TelegramPlus13221UpdateButtonUpdateFingerprint
 import app.template.patches.telegram.PlusR8IsAppUpdateAvailableFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8IsAppUpdateAvailableFingerprint
 import app.template.patches.telegram.PlusR8HasPendingAppUpdateFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8HasPendingAppUpdateFingerprint
 import app.template.patches.telegram.TelegramR8IsAppUpdateAvailableWebFingerprint
 import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalNormalFingerprint
 import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalWebFingerprint
@@ -78,6 +81,7 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
     execute {
         val updateAvailable =
             TelegramR8IsAppUpdateAvailableWebFingerprint.methodOrNull
+                ?: TelegramPlus13221R8IsAppUpdateAvailableFingerprint.methodOrNull
                 ?: PlusR8IsAppUpdateAvailableFingerprint.methodOrNull
                 ?: sharedConfigIsAppUpdateAvailableFingerprint.methodOrNull
         if (updateAvailable != null) {
@@ -103,7 +107,9 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
             } else {
                 require(
                     sharedConfigSetNewAppVersionAvailableFingerprint.methodOrNull != null ||
+                        TelegramPlus13221R8IsAppUpdateAvailableFingerprint.methodOrNull != null ||
                         PlusR8IsAppUpdateAvailableFingerprint.methodOrNull != null ||
+                        TelegramPlus13221UpdateButtonUpdateFingerprint.methodOrNull != null ||
                         PlusUpdateButtonUpdateFingerprint.methodOrNull != null
                 ) {
                     "Missing current uz.j1/tz.j1 update-store hooks and legacy/Plus update UI hooks"
@@ -114,7 +120,8 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
         // Plus has a second UI-facing predicate which checks the pending update object
         // directly. Disable it as well, so drawer/update-button surfaces stay hidden even
         // if an update response populated the cached object through another callback.
-        PlusR8HasPendingAppUpdateFingerprint.methodOrNull?.addInstructions(0, """
+        (TelegramPlus13221R8HasPendingAppUpdateFingerprint.methodOrNull
+            ?: PlusR8HasPendingAppUpdateFingerprint.methodOrNull)?.addInstructions(0, """
             const/4 v0, 0x0
             return v0
         """)
@@ -132,6 +139,7 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
                 ?: messagesControllerCheckPromoInfoInternalFingerprint.methodOrNull
         checkPromoInfo?.addInstructions(0, "return-void")
 
-        PlusUpdateButtonUpdateFingerprint.methodOrNull?.addInstructions(0, "return-void")
+        (TelegramPlus13221UpdateButtonUpdateFingerprint.methodOrNull
+            ?: PlusUpdateButtonUpdateFingerprint.methodOrNull)?.addInstructions(0, "return-void")
     }
 }

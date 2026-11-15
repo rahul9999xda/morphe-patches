@@ -17,6 +17,7 @@ import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullWebFinger
 import app.template.patches.telegram.TelegramR8IsPeerNoForwardsNormalFingerprint
 import app.template.patches.telegram.TelegramR8IsPeerNoForwardsWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8IsChatNoForwardsFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8IsChatNoForwardsFingerprint
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 
@@ -97,6 +98,7 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
             TelegramR8IsUserNoForwardsUserFullWebFingerprint,
             TelegramR8IsPeerNoForwardsNormalFingerprint,
             TelegramR8IsPeerNoForwardsWebFingerprint,
+            TelegramPlus13221R8IsChatNoForwardsFingerprint,
             TelegramPlusR8IsChatNoForwardsFingerprint,
         ).mapNotNull { it.methodOrNull }
         val namedMethods = listOf(

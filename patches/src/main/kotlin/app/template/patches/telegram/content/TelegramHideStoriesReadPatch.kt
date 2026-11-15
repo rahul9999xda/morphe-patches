@@ -10,7 +10,9 @@ import app.template.patches.telegram.StoriesReadReceiptFlowLegacyFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptNormalFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8StoriesReadReceiptFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8StoriesReadReceiptFingerprint
 import app.template.patches.telegram.TelegramPlusR8StoriesReadReceiptByDialogFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8StoriesReadReceiptByDialogFingerprint
 
 @Suppress("unused")
 val telegramHideStoriesReadPatch = bytecodePatch(
@@ -28,16 +30,18 @@ val telegramHideStoriesReadPatch = bytecodePatch(
         // The target method returns Z. Returning true preserves its success/handled
         // contract while skipping the local read update and TL_stories_readStories request.
         // Telegram Android and Web use independently fingerprinted boolean
-        // dispatchers (wg.f5.Y and zg.d5.Y). Plus has two independent request paths
+        // dispatchers (wg.f5.Y and zg.d5.Y). Plus 13.2.2.1 has two independently verified request paths
         // in StoriesController rc: R1(PeerStories,
         // StoryItem, boolean)Z and O1(long)V. Both construct
         // TL_stories_readStories, so both must be stopped on Plus.
         val currentR8Methods = listOfNotNull(
             TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull,
             TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull,
-            TelegramPlusR8StoriesReadReceiptFingerprint.methodOrNull,
+            TelegramPlus13221R8StoriesReadReceiptFingerprint.methodOrNull
+                ?: TelegramPlusR8StoriesReadReceiptFingerprint.methodOrNull,
         ).distinct()
-        val plusDialogMethod = TelegramPlusR8StoriesReadReceiptByDialogFingerprint.methodOrNull
+        val plusDialogMethod = TelegramPlus13221R8StoriesReadReceiptByDialogFingerprint.methodOrNull
+            ?: TelegramPlusR8StoriesReadReceiptByDialogFingerprint.methodOrNull
 
         if (currentR8Methods.isNotEmpty() || plusDialogMethod != null) {
             currentR8Methods.forEach { method ->

@@ -10,16 +10,13 @@ import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.telegram.TelegramR8SendTypingNormalFingerprint
 import app.template.patches.telegram.TelegramR8SendTypingWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8SendTypingFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8SendTypingFingerprint
 
 /**
- * Telegram/Web 13.2.2 and Plus Messenger 13.2.1.0 no longer expose
- * the old needSendTyping() hook used by
- * earlier versions. DEX verification shows that the actual controller-level
- * dispatchers are MessagesController.sendTyping(JJII)Z and
- * MessagesController.sendTyping(JJILjava/lang/String;I)Z.
- *
- * Returning false from both overloads blocks the typing TL dispatch directly
- * and avoids broad matchAll() hooks against unrelated methods.
+ * Telegram/Web 13.2.2 and Plus Messenger 13.2.2.1 use separately mapped
+ * controller-level sendTyping dispatchers. Plus 13.2.2.1 resolves to
+ * mo0.Pi(JJILjava/lang/String;I)Z; older Plus and named builds retain
+ * their own independent fingerprints and fallback overloads.
  */
 private val sendTypingLegacyFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
@@ -38,7 +35,7 @@ private val sendTypingActionFingerprint = Fingerprint(
 @Suppress("unused")
 val telegramHideTypingPatch = bytecodePatch(
     name = "Hide typing indicator",
-    description = "Blocks Telegram's controller-level sendTyping dispatch on audited Telegram/Web 13.2.2 and Plus 13.2.1.0 builds.",
+    description = "Blocks Telegram's controller-level sendTyping dispatch on audited Telegram/Web 13.2.2 and Plus 13.2.2.1 builds.",
 ) {
     compatibleWith(
         TELEGRAM_COMPATIBILITY,
@@ -51,9 +48,10 @@ val telegramHideTypingPatch = bytecodePatch(
         val currentR8Method =
             TelegramR8SendTypingNormalFingerprint.methodOrNull
                 ?: TelegramR8SendTypingWebFingerprint.methodOrNull
+                ?: TelegramPlus13221R8SendTypingFingerprint.methodOrNull
                 ?: TelegramPlusR8SendTypingFingerprint.methodOrNull
         if (currentR8Method != null) {
-            // 13.2.2 Android/Web and Plus 13.2.1.0 use their current obfuscated sendTyping dispatchers into D4(IIJJString)Z.
+            // 13.2.2 Android/Web and Plus 13.2.2.1 use their independently mapped sendTyping dispatchers.
             currentR8Method.addInstructions(0, """
                 const/4 v0, 0x0
                 return v0

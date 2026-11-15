@@ -22,9 +22,13 @@ import app.template.patches.telegram.TelegramR8TranslationsAutoWebFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassNormalFingerprint
 import app.template.patches.telegram.TelegramR8DevicePerformanceClassWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8MessagesControllerIsPremiumUserFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8MessagesControllerIsPremiumUserFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigIsPremiumFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8UserConfigIsPremiumFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8UserConfigHasPremiumOnAccountsFingerprint
 import app.template.patches.telegram.TelegramPlusR8UserConfigGetMaxAccountCountFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8UserConfigGetMaxAccountCountFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
 
@@ -48,6 +52,7 @@ val telegramPremiumPatch = bytecodePatch(
         val premiumUserMethod = requireNotNull(
             TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsPremiumUserWebFingerprint.methodOrNull
+                ?: TelegramPlus13221R8MessagesControllerIsPremiumUserFingerprint.methodOrNull
                 ?: TelegramPlusR8MessagesControllerIsPremiumUserFingerprint.methodOrNull
                 ?: MessagesControllerIsPremiumUserFingerprint.methodOrNull,
         ) { "Missing target-specific MessagesController Premium gate" }
@@ -58,10 +63,11 @@ val telegramPremiumPatch = bytecodePatch(
         """)
 
         // Telegram/Web 13.2.2 use d20.q()Z for the active account's premium
-        // state. Plus 13.2.1.0 has its own jm1.H()Z implementation. The old
+        // state. Plus 13.2.2.1 uses lm1.H()Z; the older Plus jm1.H()Z fingerprint remains independent. The old
         // named UserConfig fingerprint remains a legacy-only fallback.
         val userConfigPremium = requireNotNull(
             TelegramR8UserConfigIsPremiumFingerprint.methodOrNull
+                ?: TelegramPlus13221R8UserConfigIsPremiumFingerprint.methodOrNull
                 ?: TelegramPlusR8UserConfigIsPremiumFingerprint.methodOrNull
                 ?: UserConfigIsPremiumFingerprint.methodOrNull,
         ) { "Missing target-specific UserConfig Premium gate" }
@@ -92,10 +98,11 @@ val telegramPremiumPatch = bytecodePatch(
         """)
 
         // Plus-specific account gates are verified separately. Keep the
-        // account-count initialization side effect (jm1.z0) when overriding
+        // account-count initialization side effect (lm1.z0) when overriding
         // the getter; simply returning 999 left the cached count stale.
         val hasPremiumOnAccounts =
-            TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
+            TelegramPlus13221R8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
+                ?: TelegramPlusR8UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
                 ?: UserConfigHasPremiumOnAccountsFingerprint.methodOrNull
         hasPremiumOnAccounts?.addInstructions(0, """
             const/4 v0, 0x1
@@ -103,7 +110,8 @@ val telegramPremiumPatch = bytecodePatch(
         """)
 
         val plusMaxAccountCount =
-            TelegramPlusR8UserConfigGetMaxAccountCountFingerprint.methodOrNull
+            TelegramPlus13221R8UserConfigGetMaxAccountCountFingerprint.methodOrNull
+                ?: TelegramPlusR8UserConfigGetMaxAccountCountFingerprint.methodOrNull
         if (plusMaxAccountCount != null) {
             // Keep the stock SharedPreferences initialization and one-time
             // maxAccountCountChanged_ migration. Override only the returned/cache
@@ -115,7 +123,7 @@ val telegramPremiumPatch = bytecodePatch(
             require(returnIndex >= 0) { "Plus UserConfig max-account-count method has no RETURN" }
             plusMaxAccountCount.addInstructions(returnIndex, """
                 const/16 v0, 0x3E7
-                sput v0, Lorg/telegram/messenger/jm1;->z0:I
+                sput v0, ${plusMaxAccountCount.definingClass}->z0:I
             """)
         } else {
             UserConfigGetMaxAccountCountFingerprint.methodOrNull?.addInstructions(0, """

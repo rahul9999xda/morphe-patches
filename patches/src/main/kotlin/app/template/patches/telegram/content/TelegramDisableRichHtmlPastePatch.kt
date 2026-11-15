@@ -11,8 +11,10 @@ import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPastePlusFinge
 import app.template.patches.telegram.ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteNormalFingerprint
 import app.template.patches.telegram.TelegramPlus13111RichHtmlPasteFingerprint
+import app.template.patches.telegram.TelegramPlus13221RichHtmlPasteFingerprint
 import app.template.patches.telegram.TelegramR8RichHtmlPasteReceiveContentFingerprint
 import app.template.patches.telegram.TelegramPlusRichHtmlPasteReceiveContentFingerprint
+import app.template.patches.telegram.TelegramPlus13221RichHtmlPasteReceiveContentFingerprint
 
 @Suppress("unused")
 val telegramDisableRichHtmlPastePatch = bytecodePatch(
@@ -28,17 +30,18 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
     execute {
         // Verified directly in the supplied 13.2.2 / 13.2.1.0 DEX files:
         // Android + Web: m/s extends android.widget.EditText and intercepts
-        // paste via AndroidX receive-content; Plus: AppCompat l extends EditText
+        // paste via AndroidX receive-content; Plus 13.2.2.1: AppCompat l extends EditText
         // and calls androidx.appcompat.widget.x.b before the superclass.
         // PlainTextPaste converts ClipData items to String and replaces only the
         // current selection, so paste retains text but discards HTML formatting.
         // Android and Web intentionally share the same current DEX owner/method,
         // so list that fingerprint once to avoid treating the duplicate declaration
         // as two separate matches.
-        val currentPasteMethods = listOf(
-            TelegramR8RichHtmlPasteNormalFingerprint,
-            TelegramPlus13111RichHtmlPasteFingerprint,
-        ).mapNotNull { it.methodOrNull }
+        val currentPasteMethods = listOfNotNull(
+            TelegramR8RichHtmlPasteNormalFingerprint.methodOrNull,
+            TelegramPlus13221RichHtmlPasteFingerprint.methodOrNull
+                ?: TelegramPlus13111RichHtmlPasteFingerprint.methodOrNull,
+        )
         require(currentPasteMethods.size <= 1) {
             "Multiple current EditText paste handlers matched; refusing an ambiguous Rich HTML paste patch"
         }
@@ -64,7 +67,10 @@ val telegramDisableRichHtmlPastePatch = bytecodePatch(
                     "Android/Web receive-content method Lm/s;->a(Lr0/g;)Lr0/g; was not found"
                 }
             } else {
-                requireNotNull(TelegramPlusRichHtmlPasteReceiveContentFingerprint.methodOrNull) {
+                requireNotNull(
+                    TelegramPlus13221RichHtmlPasteReceiveContentFingerprint.methodOrNull
+                        ?: TelegramPlusRichHtmlPasteReceiveContentFingerprint.methodOrNull,
+                ) {
                     "Plus receive-content method AppCompat l->a(Ls0/d;)Ls0/d; was not found"
                 }
             }

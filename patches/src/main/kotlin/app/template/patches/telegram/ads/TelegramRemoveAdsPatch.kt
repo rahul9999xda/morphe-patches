@@ -12,6 +12,7 @@ import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisa
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8GetSponsoredMessagesFingerprint
 import app.template.patches.telegram.TelegramPlusR8IsSponsoredDisabledFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8IsSponsoredDisabledFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 
 private val messageObjectIsSponsoredFingerprint = Fingerprint(
@@ -61,6 +62,7 @@ val telegramRemoveAdsPatch = bytecodePatch(
         val currentControllerMethod =
             TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint.methodOrNull
+                ?: TelegramPlus13221R8IsSponsoredDisabledFingerprint.methodOrNull
                 ?: TelegramPlusR8IsSponsoredDisabledFingerprint.methodOrNull
         requireNotNull(currentControllerMethod ?: messagesControllerIsSponsoredDisabledFingerprint.methodOrNull) {
             "Missing sponsored-message disable predicate; refusing a partial Remove Ads patch"

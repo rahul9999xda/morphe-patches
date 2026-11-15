@@ -30,9 +30,13 @@ import app.template.patches.telegram.TelegramR8ShowSensitiveContentWebFingerprin
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertNormalFingerprint
 import app.template.patches.telegram.TelegramR8ShowCantOpenAlertWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8GetRestrictionReasonFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8GetRestrictionReasonFingerprint
 import app.template.patches.telegram.TelegramPlusR8IsSensitiveFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8IsSensitiveFingerprint
 import app.template.patches.telegram.TelegramPlusR8MessageObjectIsSensitiveFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8MessageObjectIsSensitiveFingerprint
 import app.template.patches.telegram.TelegramPlusR8ShowSensitiveContentFingerprint
+import app.template.patches.telegram.TelegramPlus13221R8ShowSensitiveContentFingerprint
 
 private val getRestrictionReasonFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/MessagesController;",
@@ -271,7 +275,8 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
         // where method names happen to be the same.
         val normalGetRestrictionReason = TelegramR8GetRestrictionReasonNormalFingerprint.methodOrNull
         val webGetRestrictionReason = TelegramR8GetRestrictionReasonWebFingerprint.methodOrNull
-        val plusGetRestrictionReason = TelegramPlusR8GetRestrictionReasonFingerprint.methodOrNull
+        val plusGetRestrictionReason = TelegramPlus13221R8GetRestrictionReasonFingerprint.methodOrNull
+            ?: TelegramPlusR8GetRestrictionReasonFingerprint.methodOrNull
         val matchedCurrentVariants = listOfNotNull(
             normalGetRestrictionReason?.let { "android" },
             webGetRestrictionReason?.let { "web" },
@@ -299,7 +304,8 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 "web" -> requireNotNull(TelegramR8IsSensitiveWebFingerprint.methodOrNull) {
                     "Missing Web R8 MessagesController.isSensitive(ArrayList)Z"
                 }
-                else -> requireNotNull(TelegramPlusR8IsSensitiveFingerprint.methodOrNull) {
+                else -> requireNotNull(TelegramPlus13221R8IsSensitiveFingerprint.methodOrNull
+                    ?: TelegramPlusR8IsSensitiveFingerprint.methodOrNull) {
                     "Missing Plus R8 MessagesController.isSensitive(ArrayList)Z"
                 }
             }
@@ -307,6 +313,21 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 const/4 v0, 0x0
                 return v0
             """)
+
+            // Plus keeps a separate MessageObject-level restriction predicate.
+            // It reads message.restriction_reason and caches the sensitive result;
+            // leaving it active would still hide/blur restricted media after the
+            // controller-level checks above have been bypassed. Do not touch the
+            // unrelated MessageObject forwarding/send-state predicates.
+            if (currentVariant == "plus") {
+                requireNotNull(
+                    TelegramPlus13221R8MessageObjectIsSensitiveFingerprint.methodOrNull
+                        ?: TelegramPlusR8MessageObjectIsSensitiveFingerprint.methodOrNull,
+                ) { "Missing Plus MessageObject.isSensitive()Z" }.addInstructions(0, """
+                    const/4 v0, 0x0
+                    return v0
+                """)
+            }
 
             // Do not override MessageObject.q4()/y3() or the broad controller E(...)
             // callback. DEX inspection shows q4 is a send-state predicate and y3 is
@@ -321,7 +342,8 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
                 "web" -> requireNotNull(TelegramR8ShowSensitiveContentWebFingerprint.methodOrNull) {
                     "Missing Web R8 showSensitiveContent()Z"
                 }
-                else -> requireNotNull(TelegramPlusR8ShowSensitiveContentFingerprint.methodOrNull) {
+                else -> requireNotNull(TelegramPlus13221R8ShowSensitiveContentFingerprint.methodOrNull
+                    ?: TelegramPlusR8ShowSensitiveContentFingerprint.methodOrNull) {
                     "Missing Plus R8 showSensitiveContent()Z"
                 }
             }
