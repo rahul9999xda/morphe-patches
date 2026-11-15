@@ -1,4 +1,4 @@
-package app.template.extension.extension;
+RefactorRpackage app.template.extension.extension;
 
 import android.app.Application;
 import android.content.pm.PackageInfo;
@@ -22,7 +22,15 @@ public class SignatureHookApp extends Application {
         String packageName = "<package-name>";
         String signature = "<signature>";
 
-        killPackageManager(packageName, signature);
+        // Signature spoofing is optional compatibility behavior. Android releases may
+        // make PackageInfo.CREATOR or Parcel internals non-writable/hidden. Never let a
+        // failed framework reflection operation abort Application class initialization
+        // (which would prevent the host app from reaching its own onCreate()).
+        try {
+            killPackageManager(packageName, signature);
+        } catch (Throwable ignored) {
+            // Fail open: the host application must still start normally.
+        }
     }
 
     private static void killPackageManager(String packageName, String signature) {
