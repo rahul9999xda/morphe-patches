@@ -153,9 +153,9 @@ public final class MorpheSettingsActivity extends Activity {
         // palette. This keeps text, controls, status/navigation bars and dialogs in
         // the same color family as the host Settings screen.
         colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
-        // Use a fixed dark-grey typography palette so no inherited host magenta
+        // Use a fixed Telegram-style neutral typography palette so no inherited host magenta
         // text colors leak into Morphe Settings. Keep teal controls and rule states.
-        colorPrimary = 0xff424242;
+        colorPrimary = 0xff212121;
         colorSecondary = 0xff616161;
         colorAccent = 0xff008577; // Telegram-style teal for controls and active rules.
         colorHint = 0xff757575;
@@ -998,8 +998,13 @@ public final class MorpheSettingsActivity extends Activity {
         Button button = new Button(this);
         button.setText(text);
         button.setTextColor(colorPrimary);
-        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                blend(colorSurface, colorAccent, 0.16f)));
+        // Match Telegram's neutral Settings buttons: light grey in light theme,
+        // with a subtle raised neutral surface in dark theme. Rule state colors
+        // remain independent (active teal, paused orange).
+        int buttonSurface = isColorDark(colorSurface)
+                ? blend(colorSurface, Color.WHITE, 0.14f)
+                : 0xffdddddd;
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(buttonSurface));
         return button;
     }
 
