@@ -474,6 +474,17 @@ public final class MorpheSettingsActivity extends Activity {
         } catch (Throwable ignored) { return ""; }
     }
 
+    private static boolean readBooleanField(Object object, String fieldName) {
+        if (object == null) return false;
+        try {
+            Field field = findField(object.getClass(), fieldName);
+            if (field == null) return false;
+            field.setAccessible(true);
+            Object value = field.get(object);
+            return value instanceof Boolean && (Boolean) value;
+        } catch (Throwable ignored) { return false; }
+    }
+
     private static long readLongField(Object object, String fieldName) {
         if (object == null) return 0L;
         try {
@@ -659,33 +670,45 @@ public final class MorpheSettingsActivity extends Activity {
                 long userId = readLongField(peer, "user_id");
                 long chatId = readLongField(peer, "chat_id");
                 long channelId = readLongField(peer, "channel_id");
-                // Some fork-generated Peer subclasses expose their id fields through
-                // a superclass; if reflection still yields zero, use the concrete TL
-                // peer subtype and the dialog id rather than guessing from its sign.
                 long absoluteDialogId = id == Long.MIN_VALUE ? 0L : Math.abs(id);
+
+                // Telegram 13.2.x can expose a null/obfuscated Peer on dialogs which
+                // were restored from cache. Dialog.id remains authoritative: users use
+                // positive IDs; groups/channels use negative IDs. Resolve the actual
+                // User/Chat object before falling back to a generic label.
                 if (userId == 0 && "user".equals(peerKind)) userId = absoluteDialogId;
                 if (chatId == 0 && "group".equals(peerKind)) chatId = absoluteDialogId;
                 if (channelId == 0 && "channel".equals(peerKind)) channelId = absoluteDialogId;
+                if (userId == 0 && chatId == 0 && channelId == 0 && absoluteDialogId != 0) {
+                    if (id > 0) userId = absoluteDialogId;
+                    else chatId = absoluteDialogId;
+                }
 
                 String displayName = "";
                 String icon = "💬";
-                if (userId != 0 || "user".equals(peerKind)) {
+                if (userId != 0) {
                     Object user = getUser.invoke(controller, Long.valueOf(userId));
                     displayName = (readStringField(user, "first_name") + " "
                             + readStringField(user, "last_name")).trim();
                     if (displayName.isEmpty()) displayName = readStringField(user, "username");
                     icon = "👤";
-                } else if (chatId != 0 || channelId != 0
-                        || "group".equals(peerKind) || "channel".equals(peerKind)) {
+                } else if (chatId != 0 || channelId != 0) {
                     long lookupId = channelId != 0 ? channelId : chatId;
                     Object chat = lookupId == 0 ? null : getChat.invoke(controller, Long.valueOf(lookupId));
                     displayName = readStringField(chat, "title");
-                    icon = "channel".equals(peerKind) || channelId != 0 ? "📢" : "👥";
+                    boolean broadcast = readBooleanField(chat, "broadcast");
+                    boolean megagroup = readBooleanField(chat, "megagroup");
+                    boolean gigagroup = readBooleanField(chat, "gigagroup");
+                    boolean channel = channelId != 0 || "channel".equals(peerKind)
+                            || broadcast || megagroup || gigagroup;
+                    icon = channel ? "📢" : "👥";
+                    if (displayName.isEmpty() && chat != null) {
+                        displayName = readStringField(chat, "username");
+                    }
                 }
                 if (displayName.isEmpty()) {
-                    String kind = "user".equals(peerKind) || userId != 0 ? "User"
-                            : ("channel".equals(peerKind) || channelId != 0 ? "Channel"
-                            : ("group".equals(peerKind) || chatId != 0 ? "Group" : "Chat"));
+                    String kind = userId != 0 ? "User" : (channelId != 0 || "channel".equals(peerKind)
+                            ? "Channel" : (chatId != 0 || "group".equals(peerKind) ? "Group" : "Chat"));
                     displayName = kind + " " + id;
                 }
                 unique.put(id, new ChatChoice(id, displayName, icon));
@@ -814,7 +837,7 @@ public final class MorpheSettingsActivity extends Activity {
             item.addView(secondRow, secondRowParams);
             reset.setOnClickListener(v -> new AlertDialog.Builder(this)
                     .setTitle("Reset rule counters?")
-                    .setMessage("This resets the Automation, Forwarded, Copied and Failed counters for this rule to zero. It does not change the rule.")
+                    .setMessage("This resets the Automation, Forward queued and Copy queued counters for this rule to zero. It does not change the rule.")
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Reset", (dialog, which) -> {
                         store.resetStats(rule.getId());
@@ -879,8 +902,8 @@ public final class MorpheSettingsActivity extends Activity {
 
     private String ruleDetailsText(ForwardingRule rule) {
         String deliveryCount = rule.getDeliveryMode() == ForwardingRule.DeliveryMode.FORWARD
-                ? "Forwarded: " + store.getCount(rule.getId(), "forwarded")
-                : "Copied: " + store.getCount(rule.getId(), "copied");
+                ? "Forward queued: " + store.getCount(rule.getId(), "forwardQueued")
+                : "Copy queued: " + store.getCount(rule.getId(), "copyQueued");
         return "Sources: " + rule.getSourceChatIds() + "\nDestinations: " + rule.getDestinationChatIds()
                 + "\nAutomation: " + store.getCount(rule.getId(), "automation") + " · " + deliveryCount
                 + " · Failed: " + store.getCount(rule.getId(), "failed");
