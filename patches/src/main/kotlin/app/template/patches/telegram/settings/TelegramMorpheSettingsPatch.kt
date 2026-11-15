@@ -7,6 +7,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.content.telegramBypassContentRestrictionsPatch
 import app.template.patches.telegram.TelegramR8MorpheSettingsRowsNormalFingerprint
 import app.template.patches.telegram.TelegramR8MorpheSettingsRowsWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
@@ -51,6 +52,7 @@ private val morpheSettingsActivityManifestPatch = resourcePatch(
                 if (element.tagName == "activity" &&
                     element.getAttributeNS(androidNs, "name") == activityName) {
                     element.setAttributeNS(androidNs, "android:exported", "false")
+                    element.setAttributeNS(androidNs, "android:launchMode", "singleTop")
                     found = true
                     break
                 }
@@ -59,6 +61,7 @@ private val morpheSettingsActivityManifestPatch = resourcePatch(
                 val activity = doc.createElement("activity")
                 activity.setAttributeNS(androidNs, "android:name", activityName)
                 activity.setAttributeNS(androidNs, "android:exported", "false")
+                activity.setAttributeNS(androidNs, "android:launchMode", "singleTop")
                 application.appendChild(activity)
             }
         }
@@ -92,7 +95,9 @@ val telegramMorpheSettingsPatch = bytecodePatch(
     description = "Adds Morphe Settings to Telegram Android and Telegram Web and initializes forwarding at startup.",
 ) {
     compatibleWith(TELEGRAM_COMPATIBILITY, TELEGRAM_WEB_COMPATIBILITY)
-    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch)
+    // Morphe COPY uses Telegram's native copy/drop-author send path. It must receive
+    // the same narrow noforwards bypass implementation as the standalone patch.
+    dependsOn(telegramSpoofDependency(), telegramBypassContentRestrictionsPatch, morpheSettingsActivityManifestPatch)
 
     execute {
 /**

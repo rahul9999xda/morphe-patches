@@ -3,7 +3,8 @@
     <application>
         <activity
             android:name="app.template.extension.telegram.MorpheSettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTop" />
         <receiver
             android:name="app.template.extension.telegram.MorpheRulesBackupReceiver"
             android:enabled="true"

@@ -93,8 +93,22 @@ public final class ForwardingCoordinator {
                 }
             });
         } catch (RuntimeException rejected) {
-            // Bounded queue saturation is visible and counted. No recent/dedupe key is
-            // claimed until dispatch, so a later incoming update can retry this message.
+            // The event queue can reject before the worker has matched rules. Attribute
+            // this lost event to every enabled rule that would have matched it, rather
+            // than updating only a global status string (which left per-rule Failed at 0).
+            try {
+                List<ForwardingRule> rules = store.loadRules();
+                if (rules != null && store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                    app.template.extension.telegram.SharedPreferencesForwardingRuleStore prefs =
+                            (app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store;
+                    for (ForwardingRule rule : rules) {
+                        if (rule == null) continue;
+                        try {
+                            if (ForwardingRuleMatcher.matches(rule, message)) prefs.recordQueueFailure(rule.getId());
+                        } catch (Throwable ignored) { }
+                    }
+                }
+            } catch (Throwable ignored) { }
             reportFailure(null, "Automation queue is full; incoming event was not queued", rejected);
         }
     }

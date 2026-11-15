@@ -85,7 +85,8 @@ public final class MorpheSettingsEntry {
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
                 android.graphics.Typeface.NORMAL));
-        title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, Color.BLACK));
+        int telegramAccent = themeColor(context, android.R.attr.colorAccent, 0xff3390ec);
+        title.setTextColor(telegramAccent);
         labels.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -93,7 +94,7 @@ public final class MorpheSettingsEntry {
         subtitle.setText("Automatic forwarding and custom options");
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subtitle.setLineSpacing(0f, 1.0f);
-        subtitle.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
+        subtitle.setTextColor(telegramAccent);
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleParams.topMargin = dp(context, 3);
@@ -102,7 +103,7 @@ public final class MorpheSettingsEntry {
         TextView chevron = new TextView(context);
         chevron.setText("›");
         chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-        chevron.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff555555));
+        chevron.setTextColor(telegramAccent);
         chevron.setGravity(Gravity.CENTER);
         item.addView(chevron, new LinearLayout.LayoutParams(
                 dp(context, 24), dp(context, 48)));
@@ -111,13 +112,16 @@ public final class MorpheSettingsEntry {
             @Override public void onClick(View view) {
                 try {
                     Intent intent = new Intent(context, MorpheSettingsActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     if (!(context instanceof android.app.Activity)) {
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     }
                     context.startActivity(intent);
-                } catch (android.content.ActivityNotFoundException missingActivity) {
+                } catch (Throwable launchError) {
+                    String detail = launchError.getMessage();
                     Toast.makeText(context,
-                            "Morphe Settings activity is not registered in this build",
+                            "Couldn't open Morphe Settings: " + (detail == null
+                                    ? launchError.getClass().getSimpleName() : detail),
                             Toast.LENGTH_LONG).show();
                 }
             }

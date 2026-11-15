@@ -149,15 +149,16 @@ public final class MorpheSettingsActivity extends Activity {
     }
 
     private void buildScreen() {
-        // Morphe Settings intentionally uses the earlier clean white appearance,
-        // independent of Telegram's currently selected dark theme.
-        colorBackground = 0xfffafafa;
-        colorPrimary = 0xff171717;
-        colorSecondary = 0xff666666;
-        colorAccent = 0xff171717;
-        colorHint = 0xff777777;
-        boolean dark = false;
-        colorSurface = Color.WHITE;
+        // Follow Telegram's active theme instead of forcing a separate monochrome
+        // palette. This keeps text, controls, status/navigation bars and dialogs in
+        // the same color family as the host Settings screen.
+        colorBackground = resolveThemeColor(android.R.attr.colorBackground, 0xfffafafa);
+        colorPrimary = resolveThemeColor(android.R.attr.textColorPrimary, 0xff171717);
+        colorSecondary = resolveThemeColor(android.R.attr.textColorSecondary, 0xff666666);
+        colorAccent = resolveThemeColor(android.R.attr.colorAccent, 0xff3390ec);
+        colorHint = resolveThemeColor(android.R.attr.textColorHint, colorSecondary);
+        boolean dark = isColorDark(colorBackground);
+        colorSurface = dark ? blend(colorBackground, Color.WHITE, 0.08f) : Color.WHITE;
         final int background = colorBackground;
         final int surface = colorSurface;
         final int primary = colorPrimary;
@@ -467,6 +468,17 @@ public final class MorpheSettingsActivity extends Activity {
         } catch (Throwable ignored) { return ""; }
     }
 
+    private static boolean readBooleanField(Object object, String fieldName) {
+        if (object == null) return false;
+        try {
+            Field field = findField(object.getClass(), fieldName);
+            if (field == null) return false;
+            field.setAccessible(true);
+            Object value = field.get(object);
+            return value instanceof Boolean && (Boolean) value;
+        } catch (Throwable ignored) { return false; }
+    }
+
     private static long readLongField(Object object, String fieldName) {
         if (object == null) return 0L;
         try {
@@ -652,33 +664,45 @@ public final class MorpheSettingsActivity extends Activity {
                 long userId = readLongField(peer, "user_id");
                 long chatId = readLongField(peer, "chat_id");
                 long channelId = readLongField(peer, "channel_id");
-                // Some fork-generated Peer subclasses expose their id fields through
-                // a superclass; if reflection still yields zero, use the concrete TL
-                // peer subtype and the dialog id rather than guessing from its sign.
                 long absoluteDialogId = id == Long.MIN_VALUE ? 0L : Math.abs(id);
+
+                // Telegram 13.2.x can expose a null/obfuscated Peer on dialogs which
+                // were restored from cache. Dialog.id remains authoritative: users use
+                // positive IDs; groups/channels use negative IDs. Resolve the actual
+                // User/Chat object before falling back to a generic label.
                 if (userId == 0 && "user".equals(peerKind)) userId = absoluteDialogId;
                 if (chatId == 0 && "group".equals(peerKind)) chatId = absoluteDialogId;
                 if (channelId == 0 && "channel".equals(peerKind)) channelId = absoluteDialogId;
+                if (userId == 0 && chatId == 0 && channelId == 0 && absoluteDialogId != 0) {
+                    if (id > 0) userId = absoluteDialogId;
+                    else chatId = absoluteDialogId;
+                }
 
                 String displayName = "";
                 String icon = "💬";
-                if (userId != 0 || "user".equals(peerKind)) {
+                if (userId != 0) {
                     Object user = getUser.invoke(controller, Long.valueOf(userId));
                     displayName = (readStringField(user, "first_name") + " "
                             + readStringField(user, "last_name")).trim();
                     if (displayName.isEmpty()) displayName = readStringField(user, "username");
                     icon = "👤";
-                } else if (chatId != 0 || channelId != 0
-                        || "group".equals(peerKind) || "channel".equals(peerKind)) {
+                } else if (chatId != 0 || channelId != 0) {
                     long lookupId = channelId != 0 ? channelId : chatId;
                     Object chat = lookupId == 0 ? null : getChat.invoke(controller, Long.valueOf(lookupId));
                     displayName = readStringField(chat, "title");
-                    icon = "channel".equals(peerKind) || channelId != 0 ? "📢" : "👥";
+                    boolean broadcast = readBooleanField(chat, "broadcast");
+                    boolean megagroup = readBooleanField(chat, "megagroup");
+                    boolean gigagroup = readBooleanField(chat, "gigagroup");
+                    boolean channel = channelId != 0 || "channel".equals(peerKind)
+                            || broadcast || megagroup || gigagroup;
+                    icon = channel ? "📢" : "👥";
+                    if (displayName.isEmpty() && chat != null) {
+                        displayName = readStringField(chat, "username");
+                    }
                 }
                 if (displayName.isEmpty()) {
-                    String kind = "user".equals(peerKind) || userId != 0 ? "User"
-                            : ("channel".equals(peerKind) || channelId != 0 ? "Channel"
-                            : ("group".equals(peerKind) || chatId != 0 ? "Group" : "Chat"));
+                    String kind = userId != 0 ? "User" : (channelId != 0 || "channel".equals(peerKind)
+                            ? "Channel" : (chatId != 0 || "group".equals(peerKind) ? "Group" : "Chat"));
                     displayName = kind + " " + id;
                 }
                 unique.put(id, new ChatChoice(id, displayName, icon));

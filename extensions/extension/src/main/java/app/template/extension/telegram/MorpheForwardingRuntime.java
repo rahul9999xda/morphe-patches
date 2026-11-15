@@ -363,6 +363,23 @@ public final class MorpheForwardingRuntime {
         @Override public void forward(final int accountId, final ForwardingMessage source,
                                       final long destinationChatId, final boolean showSenderName,
                                       final ResultCallback callback) {
+            enqueueNativeMessage(accountId, source, destinationChatId, !showSenderName, callback,
+                    "Forward");
+        }
+
+        @Override public void copy(final int accountId, final ForwardingMessage source,
+                                   final long destinationChatId, final boolean showSenderName,
+                                   final ResultCallback callback) {
+            // Telegram's own copy operation is messages.forwardMessages with drop_author=true.
+            // It preserves media, captions and entities while creating a new destination
+            // message without forwarded attribution. The separate text-only a0() helper
+            // discarded media and was the regression introduced in the 13.2.2 adapter.
+            enqueueNativeMessage(accountId, source, destinationChatId, true, callback, "Copy");
+        }
+
+        private void enqueueNativeMessage(final int accountId, final ForwardingMessage source,
+                                          final long destinationChatId, final boolean dropAuthor,
+                                          final ResultCallback callback, final String operation) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
@@ -374,112 +391,35 @@ public final class MorpheForwardingRuntime {
                                 ? helperClass.getMethod(mapping.sendHelperInstance, int.class).invoke(null, accountId)
                                 : helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
                         Method method = mapping.currentR8
-                                ? currentForwardMethod(helperClass, nativeMessage.getClass(), mapping)
+                                ? currentForwardMethod(helperClass, mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
                         Object sendResult = method.invoke(helper, messages, destinationChatId,
-                                !showSenderName, false, false, 0, 0, null, -1, 0L, 0L, null);
-                        // Current R8 SendMessagesHelper.q0 returns the local send/message
-                        // identifier, with 0 meaning that no request was queued. Treating
-                        // every void-free reflection call as success hid rejected channel
-                        // forwards and kept the Failed counter at zero.
+                                dropAuthor, false, false, 0, 0, null, -1, 0L, 0L, null);
                         if (sendResult instanceof Number && ((Number) sendResult).intValue() == 0) {
-                            throw new IllegalStateException("Telegram declined the native forward request");
+                            throw new IllegalStateException("Telegram declined the native " + operation.toLowerCase(java.util.Locale.ROOT) + " request");
                         }
                         if (callback != null) callback.onQueued();
                     } catch (Throwable error) {
-                        updateRuntimeStatus("Forward request failed: " + unwrap(error).getClass().getSimpleName());
+                        updateRuntimeStatus(operation + " request failed: " + unwrap(error).getClass().getSimpleName());
                         if (callback != null) callback.onFailure(unwrap(error));
                     }
                 }
-            });
+            }, callback, operation);
         }
 
-        @Override public void copy(final int accountId, final ForwardingMessage source,
-                                   final long destinationChatId, final boolean showSenderName,
-                                   final ResultCallback callback) {
-            dispatchOnMain(new Runnable() {
-                @Override public void run() {
-                    try {
-                        Object nativeMessage = source.getNativeMessage();
-                        if (nativeMessage == null) throw new IllegalStateException("Original Telegram message is unavailable");
-                        if (source.getText().trim().isEmpty()) throw new IllegalArgumentException("Only text messages can be copied");
-                        ClassLoader loader = nativeMessage.getClass().getClassLoader();
-                        if (mapping.currentR8) {
-                            // Current 13.2.2 clients expose the native text-send path as
-                            // SendMessagesHelper.a0(AccountInstance, CharSequence, topicId,
-                            // dialogId, ..., flags). It converts Telegram spans to entities
-                            // before enqueueing, preserving rich text and embedded links.
-                            Class<?> accountClass = Class.forName(mapping.accountInstanceClass, false, loader);
-                            Object accountInstance = accountClass.getMethod(mapping.accountInstanceFactory, int.class)
-                                    .invoke(null, accountId);
-                            Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
-                            Method copyMethod = helperClass.getMethod(mapping.copyMethod, accountClass,
-                                    CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
-                            // COPY is intentionally independent of Telegram's forwardability
-                            // predicate and noforwards flag. It creates a new text message at
-                            // the destination; no media or source attribution is copied.
-                            // Prefer Telegram's native CharSequence so URL/style spans survive.
-                            CharSequence copyText = extractCopyText(nativeMessage, source, mapping);
-                            if (copyText.toString().trim().isEmpty()) {
-                                throw new IllegalArgumentException("The source message has no copyable text");
-                            }
-                            copyMethod.invoke(null, accountInstance, copyText, 0L, destinationChatId, false, 0, 0);
-                        } else {
-                            Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
-                            Class<?> paramsClass = Class.forName(mapping.sendParamsClass, false, loader);
-                            Object params = paramsClass.getMethod("of", String.class, long.class)
-                                    .invoke(null, source.getText(), destinationChatId);
-                            Object owner = nativeMessage.getClass().getField(mapping.messageOwnerField).get(nativeMessage);
-                            Object entities = null;
-                            try { entities = nativeMessage.getClass().getMethod("getEntities").invoke(nativeMessage); }
-                            catch (Throwable ignored) { }
-                            if (!(entities instanceof List)) entities = owner.getClass().getField("entities").get(owner);
-                            if (entities instanceof List) paramsClass.getField("entities").set(params, new ArrayList<>((List<?>) entities));
-                            Object helper = helperClass.getMethod("getInstance", int.class).invoke(null, accountId);
-                            helperClass.getMethod("sendMessage", paramsClass).invoke(helper, params);
-                        }
-                        if (callback != null) callback.onQueued();
-                    } catch (Throwable error) {
-                        updateRuntimeStatus("Copy request failed: " + unwrap(error).getClass().getSimpleName());
-                        if (callback != null) callback.onFailure(unwrap(error));
-                    }
-                }
-            });
-        }
-
-        private static CharSequence extractCopyText(Object nativeMessage, ForwardingMessage source,
-                                                    RuntimeProfile mapping) throws Exception {
-            Object richText = null;
-            try {
-                Field textField = nativeMessage.getClass().getField(mapping.messageTextField);
-                richText = textField.get(nativeMessage);
-            } catch (NoSuchFieldException ignored) { }
-            if (richText instanceof CharSequence && ((CharSequence) richText).length() > 0) {
-                return (CharSequence) richText;
-            }
-            // Some client variants leave MessageObject.text unset for protected posts
-            // until the media/text adapter has populated it. The raw TL message text is
-            // still the authoritative text payload and is safe to resend as plain text.
-            Object owner = nativeMessage.getClass().getField(mapping.messageOwnerField).get(nativeMessage);
-            if (owner != null) {
-                try {
-                    Object raw = owner.getClass().getField("message").get(owner);
-                    if (raw instanceof CharSequence && ((CharSequence) raw).length() > 0) {
-                        return (CharSequence) raw;
-                    }
-                } catch (NoSuchFieldException ignored) { }
-            }
-            return source.getText();
-        }
-
-        private static Method currentForwardMethod(Class<?> helperClass, Class<?> messageClass,
+        private static Method currentForwardMethod(Class<?> helperClass,
                                                    RuntimeProfile mapping) throws NoSuchMethodException, ClassNotFoundException {
             ClassLoader loader = helperClass.getClassLoader();
+            Class<?> forwardOptionsClass = Class.forName(mapping.forwardOptionsClass, false, loader);
             Class<?> suggestionClass = Class.forName(mapping.suggestionParamsClass, false, loader);
+            // 13.2.2 Android uses SendMessagesHelper.q0(..., mj, ..., rj); Web
+            // uses q0(..., hj, ..., mj). The intermediate parameter is a topic/reply
+            // descriptor, not MessageObject. Matching MessageObject here made reflection
+            // fail before Telegram could enqueue any channel post.
             Method method = helperClass.getMethod(mapping.forwardMethod, ArrayList.class, long.class,
                     boolean.class, boolean.class, boolean.class, int.class, int.class,
-                    messageClass, int.class, long.class, long.class, suggestionClass);
+                    forwardOptionsClass, int.class, long.class, long.class, suggestionClass);
             method.setAccessible(true);
             return method;
         }
@@ -499,9 +439,15 @@ public final class MorpheForwardingRuntime {
             throw new NoSuchMethodException("Legacy native SendMessagesHelper forward overload not found");
         }
 
-        private static void dispatchOnMain(Runnable runnable) {
-            if (Looper.myLooper() == Looper.getMainLooper()) runnable.run();
-            else MAIN.post(runnable);
+        private static void dispatchOnMain(Runnable runnable, ResultCallback callback, String operation) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                runnable.run();
+            } else if (!MAIN.post(runnable)) {
+                IllegalStateException rejected = new IllegalStateException(
+                        "Telegram main-thread queue rejected the " + operation.toLowerCase(java.util.Locale.ROOT) + " request");
+                updateRuntimeStatus(rejected.getMessage());
+                if (callback != null) callback.onFailure(rejected);
+            }
         }
     }
 
@@ -516,7 +462,7 @@ public final class MorpheForwardingRuntime {
         final String notificationClass, delegateClass, notificationGetInstance, notificationAddObserver;
         final int eventId, maxAccounts;
         final String messageOwnerField, messageTextField, messageCanForwardMethod, dialogIdClass, dialogIdMethod;
-        final String sendHelperClass, sendHelperInstance, forwardMethod, suggestionParamsClass;
+        final String sendHelperClass, sendHelperInstance, forwardMethod, forwardOptionsClass, suggestionParamsClass;
         final String accountInstanceClass, accountInstanceFactory, copyMethod, sendParamsClass;
 
         RuntimeProfile(boolean currentR8, String applicationClass, String applicationContextField,
@@ -524,8 +470,8 @@ public final class MorpheForwardingRuntime {
                        String notificationAddObserver, int eventId, int maxAccounts,
                        String messageOwnerField, String messageTextField, String messageCanForwardMethod,
                        String dialogIdClass, String dialogIdMethod, String sendHelperClass,
-                       String sendHelperInstance, String forwardMethod, String suggestionParamsClass,
-                       String accountInstanceClass, String accountInstanceFactory, String copyMethod,
+                       String sendHelperInstance, String forwardMethod, String forwardOptionsClass,
+                       String suggestionParamsClass, String accountInstanceClass, String accountInstanceFactory, String copyMethod,
                        String sendParamsClass) {
             this.currentR8 = currentR8;
             this.applicationClass = applicationClass;
@@ -544,6 +490,7 @@ public final class MorpheForwardingRuntime {
             this.sendHelperClass = sendHelperClass;
             this.sendHelperInstance = sendHelperInstance;
             this.forwardMethod = forwardMethod;
+            this.forwardOptionsClass = forwardOptionsClass;
             this.suggestionParamsClass = suggestionParamsClass;
             this.accountInstanceClass = accountInstanceClass;
             this.accountInstanceFactory = accountInstanceFactory;
@@ -555,12 +502,12 @@ public final class MorpheForwardingRuntime {
             if (id == PROFILE_TELEGRAM_ANDROID_1322) return new RuntimeProfile(true,
                     "org.telegram.messenger.u0", "b", "org.telegram.messenger.zs",
                     "org.telegram.messenger.us", "f", "b", 1, 4, "k", "v", "w",
-                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.rj",
+                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.mj", "org.telegram.messenger.rj",
                     "org.telegram.messenger.a", "a", "a0", null);
             if (id == PROFILE_TELEGRAM_WEB_1322) return new RuntimeProfile(true,
                     "org.telegram.messenger.t0", "b", "org.telegram.messenger.vs",
                     "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v", "w",
-                    "org.telegram.messenger.h5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.mj",
+                    "org.telegram.messenger.h5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.hj", "org.telegram.messenger.mj",
                     "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
                     "org.telegram.messenger.ApplicationLoader", "applicationContext",
@@ -568,7 +515,7 @@ public final class MorpheForwardingRuntime {
                     "org.telegram.messenger.NotificationCenter$NotificationCenterDelegate",
                     "getInstance", "addObserver", 1, 4, "messageOwner", "messageText", "canForwardMessage",
                     "org.telegram.messenger.DialogObject", "isEncryptedDialog",
-                    "org.telegram.messenger.SendMessagesHelper", "getInstance", "sendMessage", "",
+                    "org.telegram.messenger.SendMessagesHelper", "getInstance", "sendMessage", "", "",
                     "", "", "", "org.telegram.messenger.SendMessagesHelper$SendMessageParams");
         }
     }
