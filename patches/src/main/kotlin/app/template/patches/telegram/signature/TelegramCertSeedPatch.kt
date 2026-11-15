@@ -3,6 +3,9 @@ package app.template.patches.telegram.signature
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.cert.seedCert
+import app.template.patches.shared.firebase.spoofFirebaseCertHashPatch
+import app.template.patches.shared.installer.spoofInstallSourcePatch
+import app.template.patches.shared.signature.spoofSignatureVerificationPatch
 
 // ════════════════════════════════════════════════════════════════════════════════
 // Telegram signing certificates — DER-encoded X.509 (NOT PKCS7)
@@ -70,21 +73,13 @@ internal val telegramCertSeedPatch = resourcePatch(default = false) {
     }
 }
 
-/**
- * Compatibility-only dependency retained for existing Telegram patch declarations.
- *
- * Telegram feature patches must not silently enable the universal signature-spoof,
- * install-source-spoof, or Firebase-certificate patches. Those operations alter the
- * Application hierarchy / PackageManager startup path and must only run when explicitly
- * selected by the user. In particular, the previous dependency chain re-parented Plus
- * z0 to SignatureHookApp without rewriting z0.<init>() to invoke the new direct
- * superclass constructor, producing an invalid Application class at startup.
- *
- * Keep this as an empty patch so existing feature patch dependencies remain source-compatible
- * while no unrelated universal hooks are pulled into ordinary Telegram patch builds.
- */
 val telegramBasePatch = bytecodePatch(default = false) {
-    // Intentionally empty. Do not add universal signature/install-source dependencies here.
+    dependsOn(
+        telegramCertSeedPatch,
+        spoofSignatureVerificationPatch,
+        spoofFirebaseCertHashPatch,
+        spoofInstallSourcePatch,
+    )
 }
 
 @JvmSynthetic
