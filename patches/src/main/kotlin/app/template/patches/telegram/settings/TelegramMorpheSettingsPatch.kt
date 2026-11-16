@@ -7,7 +7,6 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
-import app.template.patches.telegram.content.telegramBypassContentRestrictionsPatch
 import app.template.patches.telegram.TelegramR8MorpheSettingsRowsNormalFingerprint
 import app.template.patches.telegram.TelegramR8MorpheSettingsRowsWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
@@ -97,7 +96,7 @@ val telegramMorpheSettingsPatch = bytecodePatch(
     compatibleWith(TELEGRAM_COMPATIBILITY, TELEGRAM_WEB_COMPATIBILITY)
     // Morphe COPY uses Telegram's native copy/drop-author send path. It must receive
     // the same narrow noforwards bypass implementation as the standalone patch.
-    dependsOn(telegramSpoofDependency(), telegramBypassContentRestrictionsPatch, morpheSettingsActivityManifestPatch)
+    dependsOn(telegramSpoofDependency(), morpheSettingsActivityManifestPatch)
 
     execute {
 /**

@@ -290,13 +290,21 @@ public final class MorpheForwardingRuntime {
                 Object raw = ownerType.getField("message").get(owner);
                 if (raw != null) text = String.valueOf(raw);
             }
-            // Keep the original MessageObject for both delivery modes. COPY uses the
-            // native forward request with drop_author=true; the bypass patch removes
-            // only Telegram's noforwards restriction before this request is validated.
+            // FORWARD follows Telegram's own eligibility predicate. COPY remains a
+            // separate text-resend operation and does not claim to be a native forward.
+            boolean canForward = false;
+            try {
+                canForward = Boolean.TRUE.equals(messageType.getMethod(mapping.messageCanForwardMethod).invoke(messageObject));
+            } catch (Throwable ignored) { /* fail closed for forward mode */ }
+            boolean stickerOrEmojiOnly = (isStickerMessage(owner) && text.trim().isEmpty())
+                    || (!text.trim().isEmpty() && isEmojiOnlyText(text) && !hasMedia(owner));
             // The Bypass content restrictions patch changes Telegram's native noforwards
-            // predicates/field reads. Do not reapply the raw noforwards bit here.
+            // predicates/field reads. Trust MessageObject.canForwardMessage() after that
+            // patch: it retains Telegram's other eligibility checks while allowing
+            // protected channel messages. Do not reapply the raw noforwards bit here.
             return new ForwardingMessage(accountId, dialogId, messageId, text,
-                    false, false, false, protectedContent, messageObject);
+                    false, false, false, protectedContent, canForward,
+                    messageObject, stickerOrEmojiOnly);
         } catch (Throwable error) {
             if (MESSAGE_ADAPTER_ERROR_REPORTED.compareAndSet(false, true)) {
                 updateRuntimeStatus("Message adapter failed: " + unwrap(error).getClass().getSimpleName());
@@ -306,6 +314,47 @@ public final class MorpheForwardingRuntime {
     }
 
 
+    private static boolean isStickerMessage(Object owner) {
+        try {
+            Field mediaField = findField(owner.getClass(), "media");
+            if (mediaField == null) return false;
+            mediaField.setAccessible(true);
+            Object media = mediaField.get(owner);
+            if (media == null) return false;
+            if (media.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")) return true;
+            Field documentField = findField(media.getClass(), "document");
+            if (documentField == null) return false;
+            documentField.setAccessible(true);
+            Object document = documentField.get(media);
+            if (document == null) return false;
+            Field attributesField = findField(document.getClass(), "attributes");
+            if (attributesField == null) return false;
+            attributesField.setAccessible(true);
+            Object attributes = attributesField.get(document);
+            if (!(attributes instanceof Iterable)) return false;
+            for (Object attribute : (Iterable<?>) attributes) {
+                if (attribute != null && (attribute.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")
+                        || findField(attribute.getClass(), "stickerset") != null)) return true;
+            }
+        } catch (Throwable ignored) { }
+        return false;
+    }
+
+    private static boolean hasMedia(Object owner) {
+        try { Field f = findField(owner.getClass(), "media"); if (f == null) return false; f.setAccessible(true); return f.get(owner) != null; }
+        catch (Throwable ignored) { return false; }
+    }
+
+    private static boolean isEmojiOnlyText(String value) {
+        return MorpheMessageContentFilter.isEmojiOnlyText(value);
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            try { return c.getDeclaredField(name); } catch (Throwable ignored) { }
+        }
+        return null;
+    }
 
     private static final class NativeGateway implements TelegramMessageGateway {
         private final RuntimeProfile mapping;
@@ -321,11 +370,40 @@ public final class MorpheForwardingRuntime {
         @Override public void copy(final int accountId, final ForwardingMessage source,
                                    final long destinationChatId, final boolean showSenderName,
                                    final ResultCallback callback) {
-            // Telegram's own copy operation is messages.forwardMessages with drop_author=true.
-            // It preserves media, captions and entities while creating a new destination
-            // message without forwarded attribution. The separate text-only a0() helper
-            // discarded media and was the regression introduced in the 13.2.2 adapter.
-            enqueueNativeMessage(accountId, source, destinationChatId, true, callback, "Copy");
+            // Match the original Main-repository COPY contract: create a fresh text
+            // message, rather than forwarding/cloning the source MessageObject. In 13.2.2
+            // R8 builds, SendMessagesHelper.a0(AccountInstance, CharSequence, ...)
+            // is the native text-send entry point (verified in Android 73031 and Web 73039).
+            dispatchOnMain(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Object nativeMessage = source.getNativeMessage();
+                        if (nativeMessage == null) throw new IllegalStateException("Original Telegram message is unavailable");
+                        if (source.getText() == null || source.getText().trim().isEmpty())
+                            throw new IllegalArgumentException("Only text messages can be copied");
+
+                        ClassLoader loader = nativeMessage.getClass().getClassLoader();
+                        Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
+                        Class<?> accountClass = Class.forName(mapping.accountInstanceClass, false, loader);
+                        Object account = accountClass.getMethod(mapping.accountInstanceFactory, int.class)
+                                .invoke(null, accountId);
+
+                        CharSequence text = source.getText();
+                        try {
+                            Object richText = nativeMessage.getClass().getField(mapping.messageTextField).get(nativeMessage);
+                            if (richText instanceof CharSequence && ((CharSequence) richText).length() > 0)
+                                text = (CharSequence) richText;
+                        } catch (Throwable ignored) { }
+
+                        Method copy = helperClass.getMethod(mapping.copyMethod, accountClass,
+                                CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
+                        copy.invoke(null, account, text, destinationChatId, 0L, false, 0, 0);
+                        if (callback != null) callback.onQueued();
+                    } catch (Throwable error) {
+                        if (callback != null) callback.onFailure(unwrap(error));
+                    }
+                }
+            }, callback, "Copy");
         }
 
         private void enqueueNativeMessage(final int accountId, final ForwardingMessage source,
@@ -345,10 +423,9 @@ public final class MorpheForwardingRuntime {
                                 ? currentForwardMethod(helperClass, mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
-                        // The return value is a local message identifier, not a success
-                        // flag. Zero is a valid value in fork-specific send pipelines.
-                        // Treat a normal return as local queue acceptance; exceptions are
-                        // the only synchronous rejection signal exposed by this helper.
+                        // q0 returns a local message identifier (int), not a success flag.
+                        // Zero is a valid identifier in some client paths; only a thrown
+                        // exception means Telegram rejected the request before enqueueing.
                         method.invoke(helper, messages, destinationChatId,
                                 dropAuthor, false, false, 0, 0, null, -1, 0L, 0L, null);
                         if (callback != null) callback.onQueued();
@@ -413,16 +490,18 @@ public final class MorpheForwardingRuntime {
         final String applicationClass, applicationContextField;
         final String notificationClass, delegateClass, notificationGetInstance, notificationAddObserver;
         final int eventId, maxAccounts;
-        final String messageOwnerField, messageTextField, dialogIdClass, dialogIdMethod;
+        final String messageOwnerField, messageTextField, messageCanForwardMethod, dialogIdClass, dialogIdMethod;
         final String sendHelperClass, sendHelperInstance, forwardMethod, forwardOptionsClass, suggestionParamsClass;
+        final String accountInstanceClass, accountInstanceFactory, copyMethod, sendParamsClass;
 
         RuntimeProfile(boolean currentR8, String applicationClass, String applicationContextField,
                        String notificationClass, String delegateClass, String notificationGetInstance,
                        String notificationAddObserver, int eventId, int maxAccounts,
-                       String messageOwnerField, String messageTextField,
+                       String messageOwnerField, String messageTextField, String messageCanForwardMethod,
                        String dialogIdClass, String dialogIdMethod, String sendHelperClass,
                        String sendHelperInstance, String forwardMethod, String forwardOptionsClass,
-                       String suggestionParamsClass) {
+                       String suggestionParamsClass, String accountInstanceClass, String accountInstanceFactory, String copyMethod,
+                       String sendParamsClass) {
             this.currentR8 = currentR8;
             this.applicationClass = applicationClass;
             this.applicationContextField = applicationContextField;
@@ -434,6 +513,7 @@ public final class MorpheForwardingRuntime {
             this.maxAccounts = maxAccounts;
             this.messageOwnerField = messageOwnerField;
             this.messageTextField = messageTextField;
+            this.messageCanForwardMethod = messageCanForwardMethod;
             this.dialogIdClass = dialogIdClass;
             this.dialogIdMethod = dialogIdMethod;
             this.sendHelperClass = sendHelperClass;
@@ -441,26 +521,31 @@ public final class MorpheForwardingRuntime {
             this.forwardMethod = forwardMethod;
             this.forwardOptionsClass = forwardOptionsClass;
             this.suggestionParamsClass = suggestionParamsClass;
+            this.accountInstanceClass = accountInstanceClass;
+            this.accountInstanceFactory = accountInstanceFactory;
+            this.copyMethod = copyMethod;
+            this.sendParamsClass = sendParamsClass;
         }
 
         static RuntimeProfile forId(int id) {
             if (id == PROFILE_TELEGRAM_ANDROID_1322) return new RuntimeProfile(true,
                     "org.telegram.messenger.u0", "b", "org.telegram.messenger.zs",
-                    "org.telegram.messenger.us", "f", "b", 1, 4, "k", "v",
-                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0",
-                    "org.telegram.messenger.mj", "org.telegram.messenger.rj");
+                    "org.telegram.messenger.us", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.mj", "org.telegram.messenger.rj",
+                    "org.telegram.messenger.a", "a", "a0", null);
             if (id == PROFILE_TELEGRAM_WEB_1322) return new RuntimeProfile(true,
                     "org.telegram.messenger.t0", "b", "org.telegram.messenger.vs",
-                    "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v",
-                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0",
-                    "org.telegram.messenger.hj", "org.telegram.messenger.mj");
+                    "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.h5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.hj", "org.telegram.messenger.mj",
+                    "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
                     "org.telegram.messenger.ApplicationLoader", "applicationContext",
                     "org.telegram.messenger.NotificationCenter",
                     "org.telegram.messenger.NotificationCenter$NotificationCenterDelegate",
-                    "getInstance", "addObserver", 1, 4, "messageOwner", "messageText",
+                    "getInstance", "addObserver", 1, 4, "messageOwner", "messageText", "canForwardMessage",
                     "org.telegram.messenger.DialogObject", "isEncryptedDialog",
-                    "org.telegram.messenger.SendMessagesHelper", "getInstance", "sendMessage", "", "");
+                    "org.telegram.messenger.SendMessagesHelper", "getInstance", "sendMessage", "", "",
+                    "", "", "", "org.telegram.messenger.SendMessagesHelper$SendMessageParams");
         }
     }
 }
