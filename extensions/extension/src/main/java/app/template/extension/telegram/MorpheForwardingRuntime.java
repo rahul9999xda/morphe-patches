@@ -370,40 +370,11 @@ public final class MorpheForwardingRuntime {
         @Override public void copy(final int accountId, final ForwardingMessage source,
                                    final long destinationChatId, final boolean showSenderName,
                                    final ResultCallback callback) {
-            // Match the original Main-repository COPY contract: create a fresh text
-            // message, rather than forwarding/cloning the source MessageObject. In 13.2.2
-            // R8 builds, SendMessagesHelper.a0(AccountInstance, CharSequence, ...)
-            // is the native text-send entry point (verified in Android 73031 and Web 73039).
-            dispatchOnMain(new Runnable() {
-                @Override public void run() {
-                    try {
-                        Object nativeMessage = source.getNativeMessage();
-                        if (nativeMessage == null) throw new IllegalStateException("Original Telegram message is unavailable");
-                        if (source.getText() == null || source.getText().trim().isEmpty())
-                            throw new IllegalArgumentException("Only text messages can be copied");
-
-                        ClassLoader loader = nativeMessage.getClass().getClassLoader();
-                        Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
-                        Class<?> accountClass = Class.forName(mapping.accountInstanceClass, false, loader);
-                        Object account = accountClass.getMethod(mapping.accountInstanceFactory, int.class)
-                                .invoke(null, accountId);
-
-                        CharSequence text = source.getText();
-                        try {
-                            Object richText = nativeMessage.getClass().getField(mapping.messageTextField).get(nativeMessage);
-                            if (richText instanceof CharSequence && ((CharSequence) richText).length() > 0)
-                                text = (CharSequence) richText;
-                        } catch (Throwable ignored) { }
-
-                        Method copy = helperClass.getMethod(mapping.copyMethod, accountClass,
-                                CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
-                        copy.invoke(null, account, text, destinationChatId, 0L, false, 0, 0);
-                        if (callback != null) callback.onQueued();
-                    } catch (Throwable error) {
-                        if (callback != null) callback.onFailure(unwrap(error));
-                    }
-                }
-            }, callback, "Copy");
+            // Telegram's own copy operation is messages.forwardMessages with drop_author=true.
+            // It preserves media, captions and entities while creating a new destination
+            // message without forwarded attribution. The separate text-only a0() helper
+            // discarded media and was the regression introduced in the 13.2.2 adapter.
+            enqueueNativeMessage(accountId, source, destinationChatId, true, callback, "Copy");
         }
 
         private void enqueueNativeMessage(final int accountId, final ForwardingMessage source,
@@ -423,11 +394,12 @@ public final class MorpheForwardingRuntime {
                                 ? currentForwardMethod(helperClass, mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
-                        // q0 returns a local message identifier (int), not a success flag.
-                        // Zero is a valid identifier in some client paths; only a thrown
-                        // exception means Telegram rejected the request before enqueueing.
                         method.invoke(helper, messages, destinationChatId,
                                 dropAuthor, false, false, 0, 0, null, -1, 0L, 0L, null);
+                        // q0 returns a local message identifier (Int), not a Boolean
+                        // success flag. Do not reject zero/negative IDs: Telegram's send
+                        // queue may legitimately use them. A thrown exception is the
+                        // reliable indication that invocation failed before local enqueue.
                         if (callback != null) callback.onQueued();
                     } catch (Throwable error) {
                         updateRuntimeStatus(operation + " request failed: " + unwrap(error).getClass().getSimpleName());
