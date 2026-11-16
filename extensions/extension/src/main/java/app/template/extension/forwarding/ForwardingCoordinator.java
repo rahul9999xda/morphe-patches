@@ -104,7 +104,10 @@ public final class ForwardingCoordinator {
                     for (ForwardingRule rule : rules) {
                         if (rule == null) continue;
                         try {
-                            if (ForwardingRuleMatcher.matches(rule, message)) prefs.recordQueueFailure(rule.getId());
+                            if (ForwardingRuleMatcher.matches(rule, message)) {
+                                prefs.recordAutomation(rule.getId());
+                                prefs.recordQueueFailure(rule.getId());
+                            }
                         } catch (Throwable ignored) { }
                     }
                 }

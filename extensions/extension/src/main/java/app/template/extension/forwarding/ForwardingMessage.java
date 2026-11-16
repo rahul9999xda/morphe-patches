@@ -10,34 +10,17 @@ public final class ForwardingMessage {
     private final boolean secretChat;
     private final boolean serviceMessage;
     private final boolean protectedContent;
-    private final boolean forwardable;
     private final Object nativeMessage;
-    private final boolean stickerOrEmojiOnly;
 
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
                              boolean outgoing, boolean secretChat, boolean serviceMessage) {
         this(accountId, sourceChatId, messageId, text, outgoing, secretChat,
-                serviceMessage, false, true, null);
+                serviceMessage, false, null);
     }
 
     public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
                              boolean outgoing, boolean secretChat, boolean serviceMessage,
                              boolean protectedContent, Object nativeMessage) {
-        this(accountId, sourceChatId, messageId, text, outgoing, secretChat, serviceMessage,
-                protectedContent, true, nativeMessage);
-    }
-
-    public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
-                             boolean outgoing, boolean secretChat, boolean serviceMessage,
-                             boolean protectedContent, boolean forwardable, Object nativeMessage) {
-        this(accountId, sourceChatId, messageId, text, outgoing, secretChat, serviceMessage,
-                protectedContent, forwardable, nativeMessage, false);
-    }
-
-    public ForwardingMessage(int accountId, long sourceChatId, int messageId, String text,
-                             boolean outgoing, boolean secretChat, boolean serviceMessage,
-                             boolean protectedContent, boolean forwardable, Object nativeMessage,
-                             boolean stickerOrEmojiOnly) {
         this.accountId = accountId;
         this.sourceChatId = sourceChatId;
         this.messageId = messageId;
@@ -46,10 +29,9 @@ public final class ForwardingMessage {
         this.secretChat = secretChat;
         this.serviceMessage = serviceMessage;
         this.protectedContent = protectedContent;
-        this.forwardable = forwardable;
         this.nativeMessage = nativeMessage;
-        this.stickerOrEmojiOnly = stickerOrEmojiOnly;
     }
+
 
     public int getAccountId() { return accountId; }
     public long getSourceChatId() { return sourceChatId; }
@@ -59,13 +41,6 @@ public final class ForwardingMessage {
     public boolean isSecretChat() { return secretChat; }
     public boolean isServiceMessage() { return serviceMessage; }
     public boolean isProtectedContent() { return protectedContent; }
-    /**
-     * Eligibility comes from Telegram's native MessageObject predicate. When the
-     * separate Bypass content restrictions patch is applied, that predicate ignores
-     * only the noforwards restriction while retaining other native eligibility checks.
-     */
-    public boolean canForward() { return forwardable; }
-    public boolean isStickerOrEmojiOnly() { return stickerOrEmojiOnly; }
     /** Opaque original Telegram object; only a version adapter may interpret it. */
     public Object getNativeMessage() { return nativeMessage; }
 }

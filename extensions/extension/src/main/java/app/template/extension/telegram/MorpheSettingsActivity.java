@@ -41,7 +41,6 @@ import java.nio.charset.StandardCharsets;
 
 /** Dedicated in-app Morphe settings screen, opened from Telegram's Settings list. */
 public final class MorpheSettingsActivity extends Activity {
-    private static final int REQUEST_NOTIFICATION_PERMISSION = 0x4d53;
     private SharedPreferencesForwardingRuleStore store;
     private LinearLayout content;
     private LinearLayout rulesContainer;
@@ -66,7 +65,6 @@ public final class MorpheSettingsActivity extends Activity {
     private Spinner deliverySpinner;
     private Switch caseSensitiveSwitch;
     private Switch showSenderSwitch;
-    private Switch ignoreStickerEmojiSwitch;
     private static final int REQUEST_EXPORT_RULES = 73151;
     private static final int REQUEST_IMPORT_RULES = 73152;
     private Button saveRuleButton;
@@ -276,14 +274,6 @@ public final class MorpheSettingsActivity extends Activity {
         showSenderSwitch.setTextColor(primary);
         showSenderSwitch.setTextSize(14);
         form.addView(showSenderSwitch, params(-1, -2));
-        ignoreStickerEmojiSwitch = new Switch(this);
-        ignoreStickerEmojiSwitch.setText("Ignore sticker-only and emoji-only messages");
-        ignoreStickerEmojiSwitch.setTextColor(primary);
-        ignoreStickerEmojiSwitch.setTextSize(14);
-        ignoreStickerEmojiSwitch.setChecked(true);
-        LinearLayout.LayoutParams ignoreParams = params(-1, -2);
-        ignoreParams.topMargin = dp(8);
-        form.addView(ignoreStickerEmojiSwitch, ignoreParams);
 
         caseSensitiveSwitch = new Switch(this);
         caseSensitiveSwitch.setText("Case-sensitive keyword matching");
@@ -741,7 +731,7 @@ public final class MorpheSettingsActivity extends Activity {
                     matchSpinner.getSelectedItemPosition() == 1 ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                     caseSensitiveSwitch.isChecked(), deliverySpinner.getSelectedItemPosition() == 1
                             ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                    showSenderSwitch.isChecked(), ignoreStickerEmojiSwitch.isChecked());
+                    showSenderSwitch.isChecked());
             if (editingRuleId == null) {
                 rules.add(rule);
             } else {
@@ -779,7 +769,6 @@ public final class MorpheSettingsActivity extends Activity {
         if (deliverySpinner != null) deliverySpinner.setSelection(0);
         if (caseSensitiveSwitch != null) caseSensitiveSwitch.setChecked(false);
         if (showSenderSwitch != null) showSenderSwitch.setChecked(false);
-        if (ignoreStickerEmojiSwitch != null) ignoreStickerEmojiSwitch.setChecked(true);
         if (saveRuleButton != null) saveRuleButton.setText("Save forwarding rule");
         if (cancelEditButton != null) cancelEditButton.setVisibility(View.GONE);
     }
@@ -893,7 +882,7 @@ public final class MorpheSettingsActivity extends Activity {
             if (!r.getId().equals(target.getId())) { updated.add(r); continue; }
             updated.add(new ForwardingRule(r.getId(), r.getName(), enabled, r.getSourceChatIds(),
                     r.getDestinationChatIds(), r.getIncludeKeywords(), r.getExcludeKeywords(),
-                    r.getMatchMode(), r.isCaseSensitive(), r.getDeliveryMode(), r.isShowSenderName(), r.isIgnoreStickerEmojiOnly()));
+                    r.getMatchMode(), r.isCaseSensitive(), r.getDeliveryMode(), r.isShowSenderName()));
         }
         store.saveRules(updated);
         refreshRules();
@@ -931,7 +920,6 @@ public final class MorpheSettingsActivity extends Activity {
         deliverySpinner.setSelection(rule.getDeliveryMode() == ForwardingRule.DeliveryMode.COPY ? 1 : 0);
         caseSensitiveSwitch.setChecked(rule.isCaseSensitive());
         showSenderSwitch.setChecked(rule.isShowSenderName());
-        ignoreStickerEmojiSwitch.setChecked(rule.isIgnoreStickerEmojiOnly());
         Toast.makeText(this, "Rule loaded for editing; save to apply changes", Toast.LENGTH_SHORT).show();
     }
     private String joinIds(Set<Long> ids) {

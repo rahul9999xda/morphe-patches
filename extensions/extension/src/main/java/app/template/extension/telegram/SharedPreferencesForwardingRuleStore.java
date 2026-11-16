@@ -77,7 +77,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                     throw new IllegalArgumentException("Unknown keyword match mode");
                 if (!("COPY".equals(delivery) || "FORWARD".equals(delivery)))
                     throw new IllegalArgumentException("Unknown delivery mode");
-                if (!isBoolean(r, "enabled") || !isBoolean(r, "caseSensitive") || !isBoolean(r, "showSenderName") || (r.has("ignoreStickerEmojiOnly") && !isBoolean(r, "ignoreStickerEmojiOnly")))
+                if (!isBoolean(r, "enabled") || !isBoolean(r, "caseSensitive") || !isBoolean(r, "showSenderName"))
                     throw new IllegalArgumentException("Invalid rule boolean setting");
                 JSONArray include = r.optJSONArray("include");
                 JSONArray exclude = r.optJSONArray("exclude");
@@ -88,7 +88,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                         "ALL".equals(match) ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                         r.optBoolean("caseSensitive", false),
                         "COPY".equals(delivery) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                        r.optBoolean("showSenderName", false), r.optBoolean("ignoreStickerEmojiOnly", true));
+                        r.optBoolean("showSenderName", false));
             } catch (RuntimeException invalid) { throw new JSONException("Invalid rule at index " + i + ": " + invalid.getMessage()); }
         }
         JSONObject stats = root.optJSONObject("rule_stats");
@@ -170,7 +170,7 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                         "ALL".equals(item.optString("match")) ? ForwardingRule.MatchMode.ALL : ForwardingRule.MatchMode.ANY,
                         item.optBoolean("caseSensitive", false),
                         "COPY".equals(item.optString("delivery")) ? ForwardingRule.DeliveryMode.COPY : ForwardingRule.DeliveryMode.FORWARD,
-                        item.optBoolean("showSenderName", false), item.optBoolean("ignoreStickerEmojiOnly", true)));
+                        item.optBoolean("showSenderName", false)));
             }
         } catch (Throwable ignored) { }
         return result;
@@ -193,7 +193,6 @@ public final class SharedPreferencesForwardingRuleStore implements ForwardingRul
                 item.put("caseSensitive", rule.isCaseSensitive());
                 item.put("delivery", rule.getDeliveryMode().name());
                 item.put("showSenderName", rule.isShowSenderName());
-                item.put("ignoreStickerEmojiOnly", rule.isIgnoreStickerEmojiOnly());
                 array.put(item);
             } catch (Throwable ignored) { }
         }
