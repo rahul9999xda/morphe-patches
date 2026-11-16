@@ -17,7 +17,7 @@ public final class ForwardingRuleMatcher {
             // Sticker/emoji filtering is a forwarding preference only. COPY mode must
             // remain independent so a user can intentionally copy an emoji or sticker
             // caption/message without this forwarding-only filter suppressing it.
-            if (rule.isIgnoreStickerEmojiOnly() && message.isStickerOrEmojiOnly()) return false;
+            if (isIgnoreStickerEmojiOnly(rule) && message.isStickerOrEmojiOnly()) return false;
             // Do not pre-filter with MessageObject.canForwardMessage() here. In 13.2.2
             // that UI predicate rejects several channel-post shapes even when Telegram's
             // native SendMessagesHelper can enqueue them. The native helper remains the
@@ -46,6 +46,21 @@ public final class ForwardingRuleMatcher {
             if (contains(body, normalize(keyword, rule.isCaseSensitive()))) return true;
         }
         return false;
+    }
+
+    /**
+     * The optional sticker/emoji preference was added in a later ForwardingRule
+     * model revision. Resolve it reflectively so this matcher also compiles and
+     * runs with older repository branches that do not expose that accessor.
+     * Older models retain their historical behaviour (preference disabled).
+     */
+    private static boolean isIgnoreStickerEmojiOnly(ForwardingRule rule) {
+        try {
+            Object value = rule.getClass().getMethod("isIgnoreStickerEmojiOnly").invoke(rule);
+            return Boolean.TRUE.equals(value);
+        } catch (ReflectiveOperationException | SecurityException ignored) {
+            return false;
+        }
     }
 
     private static String normalize(String value, boolean caseSensitive) {
