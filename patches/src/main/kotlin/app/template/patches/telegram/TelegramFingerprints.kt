@@ -1250,48 +1250,6 @@ val TelegramPrivacyCrashlyticsLogFingerprint = Fingerprint(
     parameters = listOf("Ljava/lang/String;"),
 )
 
-// ─── Rich HTML paste ──────────────────────────────────────────────────────────
-
-// Rich HTML clipboard paste handlers verified in clean APKs. These are separate
-// per-build/fork because R8 changes the input-view owner and superclass.
-// Current Telegram/Web and historical Web builds share this handler descriptor and superclass.
-val ChatActivityEnterViewRichHtmlPasteCurrentFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/of;",
-    name = "onTextContextMenuItem",
-    returnType = "Z",
-    parameters = listOf("I"),
-)
-
-// Plus Messenger handler; identical current and historical descriptors share this fingerprint.
-val ChatActivityEnterViewRichHtmlPastePlusFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/qh0;",
-    name = "onTextContextMenuItem",
-    returnType = "Z",
-    parameters = listOf("I"),
-)
-
-
-val ChatActivityEnterViewRichHtmlPasteTelegram1303Fingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/nf;",
-    name = "onTextContextMenuItem",
-    returnType = "Z",
-    parameters = listOf("I"),
-)
-
-// Telegram Web 13.0.3 build 71839: of extends Components/mg.
-
-
-// Legacy-only target retained for older Telegram/Web releases that still expose the
-// named helper. It is absent from the current Telegram/Web 13.1.1 and Plus 13.1.1.0 APKs.
-// Do not use this as the current target; those builds use the onTextContextMenuItem
-// fingerprints above.
-val ChatActivityEnterViewHandleRichHtmlPasteFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
-    name = "handleRichHtmlPaste",
-    returnType = "Z",
-    parameters = listOf(),
-)
-
 // ════════════════════════════════════════════════════════════════════════════════
 // CURRENT TELEGRAM 13.2.2 R8 FINGERPRINTS (ADDITIVE)
 // These exact R8 targets are preferred by revised patches; legacy fingerprints above
@@ -1646,23 +1604,6 @@ val TelegramR8ProcessUpdateArrayWebFingerprint = Fingerprint(
     parameters = listOf("Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Z", "I"),
 )
 
-val TelegramR8RichHtmlPasteNormalFingerprint = Fingerprint(
-    // Telegram Android 13.2.2 build 73031: current paste owner is the
-    // R8-renamed EditText subclass m.s (direct superclass EditText).
-    definingClass = "Lm/s;", name = "onTextContextMenuItem",
-    returnType = "Z", parameters = listOf("I"),
-)
-val TelegramR8RichHtmlPasteWebFingerprint = Fingerprint(
-    // Telegram Web 13.2.2 build 73039 uses the same AndroidX EditText owner.
-    definingClass = "Lm/s;", name = "onTextContextMenuItem",
-    returnType = "Z", parameters = listOf("I"),
-)
-val TelegramPlus13111RichHtmlPasteFingerprint = Fingerprint(
-    // Plus Messenger 13.2.1.0 build 22678 uses AppCompat EditText l;
-    // its override delegates paste to AppCompat receive-content before super.
-    definingClass = "Landroidx/appcompat/widget/l;",
-    name = "onTextContextMenuItem", returnType = "Z", parameters = listOf("I"),
-)
 
 
 // Telegram Web 13.2.2 build 73039: storage-side normal/private deletion worker.
@@ -1688,21 +1629,9 @@ val TelegramR8PushRemoteMessageDeleteFingerprint = Fingerprint(
 // Android and Web 13.2.2 receive-content path on the same R8 EditText subclass.
 // This is separate from onTextContextMenuItem: AndroidX can deliver rich ClipData
 // directly through this method without invoking the context-menu override.
-val TelegramR8RichHtmlPasteReceiveContentFingerprint = Fingerprint(
-    definingClass = "Lm/s;",
-    name = "a",
-    returnType = "Lr0/g;",
-    parameters = listOf("Lr0/g;"),
-)
 
 // Plus Messenger 13.2.1.0 AppCompat EditText receive-content callback.
 // DEX: androidx.appcompat.widget.l implements Ls0/b0 and receives Ls0/d;.
-val TelegramPlusRichHtmlPasteReceiveContentFingerprint = Fingerprint(
-    definingClass = "Landroidx/appcompat/widget/l;",
-    name = "a",
-    returnType = "Ls0/d;",
-    parameters = listOf("Ls0/d;"),
-)
 
 val TelegramR8SendTypingNormalFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/wp;", name = "D4", returnType = "Z",
@@ -1904,14 +1833,6 @@ val TelegramPlus13221R8CertificateHashFingerprint = Fingerprint(
     parameters = emptyList(),
 )
 
-val TelegramPlus13221RichHtmlPasteFingerprint = Fingerprint(
-    definingClass = "Landroidx/appcompat/widget/l;",
-    name = "onTextContextMenuItem", returnType = "Z", parameters = listOf("I"),
-)
-val TelegramPlus13221RichHtmlPasteReceiveContentFingerprint = Fingerprint(
-    definingClass = "Landroidx/appcompat/widget/l;",
-    name = "a", returnType = "Ls0/d;", parameters = listOf("Ls0/d;"),
-)
 
 val TelegramPlus13221UpdateButtonUpdateFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/Components/UpdateButton;",
