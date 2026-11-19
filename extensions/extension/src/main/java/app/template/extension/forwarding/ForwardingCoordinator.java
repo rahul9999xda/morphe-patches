@@ -87,7 +87,16 @@ public final class ForwardingCoordinator {
                         for (Long destination : destinations) {
                             if (!running) return;
                             if (destination == null || destination.longValue() == message.getSourceChatId()) continue;
-                            dispatch(rule, message, destination.longValue());
+                            // A destination is an independent delivery. Even an unexpected
+                            // scheduling/runtime failure for one target must not abort the
+                            // remaining targets configured on this rule.
+                            try {
+                                dispatch(rule, message, destination.longValue());
+                            } catch (Throwable destinationError) {
+                                reportFailure(rule.getId(),
+                                        "Could not schedule delivery for destination " + destination,
+                                        destinationError);
+                            }
                         }
                     }
                 }

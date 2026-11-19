@@ -363,23 +363,26 @@ public final class MorpheForwardingRuntime {
         @Override public void forward(final int accountId, final ForwardingMessage source,
                                       final long destinationChatId, final boolean showSenderName,
                                       final ResultCallback callback) {
-            enqueueNativeMessage(accountId, source, destinationChatId, !showSenderName, callback,
-                    "Forward");
+            enqueueNativeMessage(accountId, source, destinationChatId,
+                    false, !showSenderName, callback, "Forward");
         }
 
         @Override public void copy(final int accountId, final ForwardingMessage source,
                                    final long destinationChatId, final boolean showSenderName,
                                    final ResultCallback callback) {
-            // Telegram's own copy operation is messages.forwardMessages with drop_author=true.
-            // It preserves media, captions and entities while creating a new destination
-            // message without forwarded attribution. The separate text-only a0() helper
-            // discarded media and was the regression introduced in the 13.2.2 adapter.
-            enqueueNativeMessage(accountId, source, destinationChatId, true, callback, "Copy");
+            // Use Telegram's native message-copy pipeline (forwardMessages with author
+            // attribution removed). In the 13.2.2 R8 overload the FIRST boolean controls
+            // media dropping, not author attribution: setting it true strips ordinary
+            // MessageMediaWebPage previews (including their photo) while leaving the text
+            // and URL entities. The SECOND boolean is the drop-author option.
+            enqueueNativeMessage(accountId, source, destinationChatId,
+                    false, true, callback, "Copy");
         }
 
         private void enqueueNativeMessage(final int accountId, final ForwardingMessage source,
-                                          final long destinationChatId, final boolean dropAuthor,
-                                          final ResultCallback callback, final String operation) {
+                                          final long destinationChatId, final boolean dropMedia,
+                                          final boolean dropAuthor, final ResultCallback callback,
+                                          final String operation) {
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
@@ -394,8 +397,13 @@ public final class MorpheForwardingRuntime {
                                 ? currentForwardMethod(helperClass, mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
+                        // The legacy SendMessagesHelper overload has a different historical
+                        // flag layout. Keep its old first-flag behavior unchanged; for the
+                        // current 13.2.2 q0 overload pass dropMedia and dropAuthor separately.
+                        boolean firstFlag = mapping.currentR8 ? dropMedia : dropAuthor;
+                        boolean secondFlag = mapping.currentR8 ? dropAuthor : false;
                         method.invoke(helper, messages, destinationChatId,
-                                dropAuthor, false, false, 0, 0, null, -1, 0L, 0L, null);
+                                firstFlag, secondFlag, false, 0, 0, null, -1, 0L, 0L, null);
                         // q0 returns a local message identifier (Int), not a Boolean
                         // success flag. Do not reject zero/negative IDs: Telegram's send
                         // queue may legitimately use them. A thrown exception is the
