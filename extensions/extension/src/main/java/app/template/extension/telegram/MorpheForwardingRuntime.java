@@ -401,9 +401,11 @@ public final class MorpheForwardingRuntime {
                             Method textCopy = helperClass.getDeclaredMethod(mapping.copyMethod, accountClass,
                                     CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
                             textCopy.setAccessible(true);
-                            // Telegram a0 parameter order: AccountInstance, text, topicId,
-                            // destination dialogId, disableWebPagePreview, scheduleDate, flags.
-                            textCopy.invoke(helper, account, richText, 0L, destinationChatId, false, 0, 0);
+                            // Telegram a0 text-send order: AccountInstance, text, destination dialogId,
+                            // topicId, notify, scheduleDate, scheduleRepeatPeriod. The first long
+                            // MUST be the destination chat ID; the second is the topic ID (0 here).
+                            // Keep notify=false to preserve this automation's silent-send behavior.
+                            textCopy.invoke(helper, account, richText, destinationChatId, 0L, false, 0, 0);
                         } else if (mapping.currentR8) {
                             // Media and caption messages use Telegram's native new-message
                             // params factory. If it cannot be mapped, fail rather than
