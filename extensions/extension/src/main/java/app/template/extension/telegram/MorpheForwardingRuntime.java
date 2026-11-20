@@ -387,25 +387,15 @@ public final class MorpheForwardingRuntime {
                         Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
                         Object helper = helperClass.getMethod(mapping.sendHelperInstance, int.class).invoke(null, accountId);
                         if (mapping.currentR8 && isTextOrWebPagePreview(nativeMessage, mapping)) {
-                            // Use Telegram's composer text-send path for text and webpage
-                            // previews. It consumes the original Spanned CharSequence,
-                            // turns URLSpan/formatting spans into MessageEntity objects,
-                            // and leaves webpage preview generation enabled. This mirrors
-                            // the successful manual copy/paste behaviour.
-                            CharSequence richText = readNativeRichText(nativeMessage, mapping);
-                            if (richText == null || richText.length() == 0) {
-                                throw new IllegalStateException("Original Telegram rich text is unavailable for COPY");
+                            // COPY text through Telegram's native SendMessageParams factory.
+                            // Supplying the original TL entities and WebPage explicitly is
+                            // essential: MessageObject.messageText alone is not guaranteed to
+                            // retain hidden URL entities or the generated preview object.
+                            if (!trySendNativeTextCopy(helperClass, helper, nativeMessage,
+                                    destinationChatId, mapping)) {
+                                throw new NoSuchMethodException(
+                                        "Telegram native text SendMessageParams.of(text, peer, ..., webpage, entities, ...) not found");
                             }
-                            Class<?> accountClass = Class.forName(mapping.accountInstanceClass, false, loader);
-                            Object account = accountClass.getMethod(mapping.accountInstanceFactory, int.class).invoke(null, accountId);
-                            Method textCopy = helperClass.getDeclaredMethod(mapping.copyMethod, accountClass,
-                                    CharSequence.class, long.class, long.class, boolean.class, int.class, int.class);
-                            textCopy.setAccessible(true);
-                            // Telegram a0 text-send order: AccountInstance, text, destination dialogId,
-                            // topicId, notify, scheduleDate, scheduleRepeatPeriod. The first long
-                            // MUST be the destination chat ID; the second is the topic ID (0 here).
-                            // Keep notify=false to preserve this automation's silent-send behavior.
-                            textCopy.invoke(helper, account, richText, destinationChatId, 0L, false, 0, 0);
                         } else if (mapping.currentR8) {
                             // Media and caption messages use Telegram's native new-message
                             // params factory. If it cannot be mapped, fail rather than
@@ -443,12 +433,16 @@ public final class MorpheForwardingRuntime {
                                 ? currentForwardMethod(helperClass, mapping)
                                 : legacyForwardMethod(helperClass, nativeMessage.getClass());
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
-                        // This method is FORWARD-only. The current R8 q0 overload has
-                        // separate dropMedia and dropAuthor arguments; COPY never reaches it.
-                        boolean firstFlag = mapping.currentR8 ? dropMedia : dropAuthor;
-                        boolean secondFlag = mapping.currentR8 ? dropAuthor : false;
+                        // Telegram's current native forward overload maps its first three
+                        // booleans as forwardFromMyName, hideCaption, notify. The UI option
+                        // controls only forwardFromMyName: true means drop original author.
+                        // dropMedia is retained in the second (caption/media handling) slot
+                        // only for legacy adapter compatibility; it is false for normal rules.
+                        // COPY never reaches this native forwarding method.
+                        boolean forwardFromMyName = dropAuthor;
+                        boolean hideCaption = dropMedia;
                         method.invoke(helper, messages, destinationChatId,
-                                firstFlag, secondFlag, false, 0, 0, null, -1, 0L, 0L, null);
+                                forwardFromMyName, hideCaption, false, 0, 0, null, -1, 0L, 0L, null);
                         // q0 returns a local message identifier (Int), not a Boolean
                         // success flag. Do not reject zero/negative IDs: Telegram's send
                         // queue may legitimately use them. A thrown exception is the
@@ -487,6 +481,92 @@ public final class MorpheForwardingRuntime {
                 String mediaName = media.getClass().getName().toLowerCase(java.util.Locale.ROOT);
                 return mediaName.contains("webpage") || findField(media.getClass(), "webpage") != null;
             } catch (Throwable ignored) { return false; }
+        }
+
+        /**
+         * Builds a new text message with Telegram's own text/webpage/entity params.
+         * Mirrors Telegram's composer path: SendMessageParams.of(text, peer, reply,
+         * topReply, webPage, webPage != null, entities, ...). This is a genuine COPY;
+         * it does not submit the source message through forwardMessages.
+         */
+        private static boolean trySendNativeTextCopy(Class<?> helperClass, Object helper,
+                                                       Object nativeMessage, long destinationChatId,
+                                                       RuntimeProfile mapping) throws Exception {
+            Field ownerField = findField(nativeMessage.getClass(), mapping.messageOwnerField);
+            if (ownerField == null) return false;
+            ownerField.setAccessible(true);
+            Object owner = ownerField.get(nativeMessage);
+            if (owner == null) return false;
+
+            Field messageField = findField(owner.getClass(), "message");
+            if (messageField == null) return false;
+            messageField.setAccessible(true);
+            Object rawText = messageField.get(owner);
+            String text = rawText == null ? "" : String.valueOf(rawText);
+            if (text.isEmpty()) {
+                CharSequence rendered = readNativeRichText(nativeMessage, mapping);
+                text = rendered == null ? "" : rendered.toString();
+            }
+            if (text.isEmpty()) return false;
+
+            Object webPage = null;
+            Field mediaField = findField(owner.getClass(), "media");
+            if (mediaField != null) {
+                mediaField.setAccessible(true);
+                Object media = mediaField.get(owner);
+                if (media != null) {
+                    Field webPageField = findField(media.getClass(), "webpage");
+                    if (webPageField != null) {
+                        webPageField.setAccessible(true);
+                        webPage = webPageField.get(media);
+                    }
+                }
+            }
+            Object entities = null;
+            Field entitiesField = findField(owner.getClass(), "entities");
+            if (entitiesField != null) {
+                entitiesField.setAccessible(true);
+                entities = entitiesField.get(owner);
+            }
+
+            Class<?> paramsClass = null;
+            Method factory = null;
+            for (Class<?> nested : helperClass.getDeclaredClasses()) {
+                for (Method candidate : nested.getDeclaredMethods()) {
+                    Class<?>[] p = candidate.getParameterTypes();
+                    if (!java.lang.reflect.Modifier.isStatic(candidate.getModifiers())
+                            || !"of".equals(candidate.getName()) || p.length != 14
+                            || p[0] != String.class || p[1] != long.class
+                            || p[5] != boolean.class || p[9] != boolean.class
+                            || p[10] != int.class || p[11] != int.class) continue;
+                    if (webPage != null && !p[4].isInstance(webPage)) continue;
+                    if (entities != null && !p[6].isInstance(entities)) continue;
+                    if (factory != null) throw new IllegalStateException(
+                            "Ambiguous Telegram native text SendMessageParams factory");
+                    factory = candidate;
+                    paramsClass = nested;
+                }
+            }
+            if (factory == null || paramsClass == null) return false;
+            factory.setAccessible(true);
+            Object[] args = new Object[]{text, destinationChatId, null, null, webPage,
+                    webPage != null, entities, null, null, false, 0, 0, null, false};
+            Object params = factory.invoke(null, args);
+
+            Method send = null;
+            for (Method candidate : helperClass.getMethods()) {
+                if ("sendMessage".equals(candidate.getName())
+                        && candidate.getParameterTypes().length == 1
+                        && candidate.getParameterTypes()[0] == paramsClass) {
+                    if (send != null) throw new IllegalStateException(
+                            "Ambiguous Telegram native sendMessage(params) overload");
+                    send = candidate;
+                }
+            }
+            if (send == null) return false;
+            send.setAccessible(true);
+            send.invoke(helper, params);
+            return true;
         }
 
         /** Finds the current R8-renamed SendMessageParams factory by its native input type. */
