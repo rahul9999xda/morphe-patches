@@ -51,7 +51,7 @@ Releases and test builds are produced through the repository's configured build 
 
 
 <details>
-<summary><strong>Telegram</strong> · 16 patches</summary>
+<summary><strong>Telegram</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -75,13 +75,12 @@ Releases and test builds are produced through the repository's configured build 
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on audited Telegram/Web 13.1.1 and Plus 13.1.1.0 builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks current and legacy Plus ad-loader entry points. |
 | **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
-| **Use normal paste for Rich HTML clipboard content** | Bypasses Telegram's custom Rich HTML clipboard handling and delegates paste to the normal superclass implementation. |
 | **Voice to music** | Plays voice notes through the music-player path while preserving Raise-to-Listen. |
 
 </details>
 
 <details>
-<summary><strong>Telegram Plus</strong> · 16 patches</summary>
+<summary><strong>Telegram Plus</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -105,13 +104,12 @@ Releases and test builds are produced through the repository's configured build 
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on audited Telegram/Web 13.1.1 and Plus 13.1.1.0 builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks current and legacy Plus ad-loader entry points. |
 | **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
-| **Use normal paste for Rich HTML clipboard content** | Bypasses Telegram's custom Rich HTML clipboard handling and delegates paste to the normal superclass implementation. |
 | **Voice to music** | Plays voice notes through the music-player path while preserving Raise-to-Listen. |
 
 </details>
 
 <details>
-<summary><strong>Telegram Web</strong> · 16 patches</summary>
+<summary><strong>Telegram Web</strong> · 15 patches</summary>
 
 🎯 **Supported versions:**
 
@@ -135,7 +133,6 @@ Releases and test builds are produced through the repository's configured build 
 | **Hide typing indicator** | Blocks Telegram's controller-level sendTyping dispatch on audited Telegram/Web 13.1.1 and Plus 13.1.1.0 builds. |
 | **Remove ads** | Removes sponsored messages and video ads. On Telegram Plus also blocks current and legacy Plus ad-loader entry points. |
 | **Unlock Premium** | Unlocks Telegram Premium features for the current account. |
-| **Use normal paste for Rich HTML clipboard content** | Bypasses Telegram's custom Rich HTML clipboard handling and delegates paste to the normal superclass implementation. |
 | **Voice to music** | Plays voice notes through the music-player path while preserving Raise-to-Listen. |
 
 </details>
