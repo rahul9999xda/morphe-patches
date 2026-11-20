@@ -296,15 +296,13 @@ public final class MorpheForwardingRuntime {
             try {
                 canForward = Boolean.TRUE.equals(messageType.getMethod(mapping.messageCanForwardMethod).invoke(messageObject));
             } catch (Throwable ignored) { /* fail closed for forward mode */ }
-            boolean stickerOrEmojiOnly = (isStickerMessage(owner) && text.trim().isEmpty())
-                    || (!text.trim().isEmpty() && isEmojiOnlyText(text) && !hasMedia(owner));
             // The Bypass content restrictions patch changes Telegram's native noforwards
             // predicates/field reads. Trust MessageObject.canForwardMessage() after that
             // patch: it retains Telegram's other eligibility checks while allowing
             // protected channel messages. Do not reapply the raw noforwards bit here.
             return new ForwardingMessage(accountId, dialogId, messageId, text,
                     false, false, false, protectedContent, canForward,
-                    messageObject, stickerOrEmojiOnly);
+                    messageObject);
         } catch (Throwable error) {
             if (MESSAGE_ADAPTER_ERROR_REPORTED.compareAndSet(false, true)) {
                 updateRuntimeStatus("Message adapter failed: " + unwrap(error).getClass().getSimpleName());
@@ -313,41 +311,6 @@ public final class MorpheForwardingRuntime {
         }
     }
 
-
-    private static boolean isStickerMessage(Object owner) {
-        try {
-            Field mediaField = findField(owner.getClass(), "media");
-            if (mediaField == null) return false;
-            mediaField.setAccessible(true);
-            Object media = mediaField.get(owner);
-            if (media == null) return false;
-            if (media.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")) return true;
-            Field documentField = findField(media.getClass(), "document");
-            if (documentField == null) return false;
-            documentField.setAccessible(true);
-            Object document = documentField.get(media);
-            if (document == null) return false;
-            Field attributesField = findField(document.getClass(), "attributes");
-            if (attributesField == null) return false;
-            attributesField.setAccessible(true);
-            Object attributes = attributesField.get(document);
-            if (!(attributes instanceof Iterable)) return false;
-            for (Object attribute : (Iterable<?>) attributes) {
-                if (attribute != null && (attribute.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("sticker")
-                        || findField(attribute.getClass(), "stickerset") != null)) return true;
-            }
-        } catch (Throwable ignored) { }
-        return false;
-    }
-
-    private static boolean hasMedia(Object owner) {
-        try { Field f = findField(owner.getClass(), "media"); if (f == null) return false; f.setAccessible(true); return f.get(owner) != null; }
-        catch (Throwable ignored) { return false; }
-    }
-
-    private static boolean isEmojiOnlyText(String value) {
-        return MorpheMessageContentFilter.isEmojiOnlyText(value);
-    }
 
     private static Field findField(Class<?> type, String name) {
         for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
