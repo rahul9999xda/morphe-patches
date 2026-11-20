@@ -408,7 +408,7 @@ public final class MorpheForwardingRuntime {
                             // CharSequence, long dialogId, long topicId, boolean notify,
                             // int scheduleDate, int scheduleRepeatPeriod). For ordinary
                             // destinations topicId is zero. Keep notify=false for silent copy.
-                            textCopy.invoke(null, account, richText, destinationChatId, 0L, false, 0, 0);
+                            textCopy.invoke(null, account, richText, 0L, destinationChatId, false, 0, 0);
                         } else {
                             // Native media COPY still uses the independent new-message
                             // SendMessageParams path. It never falls back to q0/forwardMessages.
@@ -450,8 +450,8 @@ public final class MorpheForwardingRuntime {
                         ArrayList<Object> messages = new ArrayList<>(Collections.singletonList(nativeMessage));
                         // This method is FORWARD-only. The current R8 q0 overload has
                         // separate dropMedia and dropAuthor arguments; COPY never reaches it.
-                        boolean firstFlag = mapping.currentR8 ? dropMedia : dropAuthor;
-                        boolean secondFlag = mapping.currentR8 ? dropAuthor : false;
+                        boolean firstFlag = dropAuthor;
+                        boolean secondFlag = mapping.currentR8 ? dropMedia : false;
                         method.invoke(helper, messages, destinationChatId,
                                 firstFlag, secondFlag, false, 0, 0, null, -1, 0L, 0L, null);
                         // q0 returns a local message identifier (Int), not a Boolean
