@@ -338,8 +338,8 @@ public final class MorpheForwardingRuntime {
             // COPY is a new outgoing message, not a forward with drop_author set.
             // On current R8 builds SendMessageParams.of(MessageObject) is preferred
             // because it retains the original entity/media model. If that factory is
-            // unavailable, the verified a0(AccountInstance, CharSequence, topicId,
-            // dialogId, ...) text-send path preserves Spanned URL entities and lets
+            // unavailable, the verified a0(AccountInstance, CharSequence, dialogId,
+            // topicId, ...) text-send path preserves Spanned URL entities and lets
             // Telegram resolve the webpage preview again from the original URL.
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
@@ -369,9 +369,10 @@ public final class MorpheForwardingRuntime {
                             textCopy.setAccessible(true);
                             // Verified from Telegram 13.2.2 DEX: a0(AccountInstance,
                             // CharSequence, long dialogId, long topicId, boolean notify,
-                            // int scheduleDate, int scheduleRepeatPeriod). For ordinary
-                            // destinations topicId is zero. Keep notify=false for silent copy.
-                            textCopy.invoke(null, account, richText, 0L, destinationChatId, false, 0, 0);
+                            // int scheduleDate, int scheduleRepeatPeriod). The destination
+                            // dialogId must be the FIRST long argument; ordinary chats use
+                            // topicId=0 as the SECOND long argument.
+                            textCopy.invoke(null, account, richText, destinationChatId, 0L, false, 0, 0);
                         } else {
                             // Native media COPY still uses the independent new-message
                             // SendMessageParams path. It never falls back to q0/forwardMessages.
