@@ -336,11 +336,9 @@ public final class MorpheForwardingRuntime {
                                    final long destinationChatId, final boolean showSenderName,
                                    final ResultCallback callback) {
             // COPY is a new outgoing message, not a forward with drop_author set.
-            // On current R8 builds SendMessageParams.of(MessageObject) is preferred
-            // because it retains the original entity/media model. If that factory is
-            // unavailable, the verified a0(AccountInstance, CharSequence, dialogId,
-            // topicId, ...) text-send path preserves Spanned URL entities and lets
-            // Telegram resolve the webpage preview again from the original URL.
+            // Current R8 webpage previews use Telegram's c0(MessageObject, ...) new-message
+            // composer so the original TL_webPage and entities are retained. Plain text
+            // continues through a0(...); media continues through its separate params path.
             dispatchOnMain(new Runnable() {
                 @Override public void run() {
                     try {
@@ -348,13 +346,21 @@ public final class MorpheForwardingRuntime {
                         if (nativeMessage == null) throw new IllegalStateException("Original Telegram message is unavailable");
                         ClassLoader loader = nativeMessage.getClass().getClassLoader();
                         Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
-                        if (mapping.currentR8 && isTextOrWebPagePreview(nativeMessage, mapping)) {
-                            // Text and webpage-preview COPY must use Telegram's own composer
-                            // entry point. Do not route this case through SendMessageParams.of:
-                            // that factory is not present in the current R8 SendMessagesHelper.
-                            // The original MessageObject.messageText is a CharSequence carrying
-                            // Telegram URL/formatting spans; a0 converts those spans into native
-                            // entities and resolves the webpage preview from the original URL.
+                        if (mapping.currentR8 && isWebPagePreview(nativeMessage, mapping)) {
+                            // A webpage-preview message must retain its original TL_webPage
+                            // object as well as its message entities. Telegram's c0(MessageObject,
+                            // dialogId, scheduleDate, savedPeerId, SuggestionParams) path builds
+                            // a fresh outgoing message and carries both across. It is not a
+                            // forwardMessages/q0 operation and does not preserve sender metadata.
+                            Object helper = helperClass.getMethod(mapping.sendHelperInstance, int.class)
+                                    .invoke(null, accountId);
+                            if (!tryNativeWebPageCopy(helperClass, helper, nativeMessage,
+                                    destinationChatId, mapping, loader)) {
+                                throw new NoSuchMethodException("Native webpage-preview COPY method not found");
+                            }
+                        } else if (mapping.currentR8 && isTextOrWebPagePreview(nativeMessage, mapping)) {
+                            // Plain text COPY remains on Telegram's existing text composer.
+                            // This path is already working and is intentionally not changed.
                             CharSequence richText = readNativeRichText(nativeMessage, mapping);
                             if (richText == null || richText.length() == 0) {
                                 throw new IllegalStateException("Original Telegram rich text is unavailable for COPY");
@@ -439,6 +445,44 @@ public final class MorpheForwardingRuntime {
                 Object value = field.get(nativeMessage);
                 return value instanceof CharSequence ? (CharSequence) value : null;
             } catch (Throwable ignored) { return null; }
+        }
+
+        private static boolean isWebPagePreview(Object nativeMessage, RuntimeProfile mapping) {
+            try {
+                Field ownerField = findField(nativeMessage.getClass(), mapping.messageOwnerField);
+                if (ownerField == null) return false;
+                ownerField.setAccessible(true);
+                Object owner = ownerField.get(nativeMessage);
+                if (owner == null) return false;
+                Field mediaField = findField(owner.getClass(), "media");
+                if (mediaField == null) return false;
+                mediaField.setAccessible(true);
+                Object media = mediaField.get(owner);
+                if (media == null) return false;
+                Field webpageField = findField(media.getClass(), "webpage");
+                if (webpageField == null) return false;
+                webpageField.setAccessible(true);
+                return webpageField.get(media) != null;
+            } catch (Throwable ignored) { return false; }
+        }
+
+        /**
+         * Uses Telegram's own MessageObject-to-new-message composer for webpage previews.
+         * DEX-confirmed descriptors:
+         * Android: rz.c0(mj, long, long, long, rj)
+         * Web:     rz.c0(hj, long, long, long, mj)
+         * The first long is the destination dialog. The other two are zero for an
+         * immediate ordinary send (no scheduled date and no saved-peer override).
+         */
+        private static boolean tryNativeWebPageCopy(Class<?> helperClass, Object helper,
+                                                     Object nativeMessage, long destinationChatId,
+                                                     RuntimeProfile mapping, ClassLoader loader) throws Exception {
+            Class<?> suggestionClass = Class.forName(mapping.suggestionParamsClass, false, loader);
+            Method copy = helperClass.getMethod("c0", nativeMessage.getClass(),
+                    long.class, long.class, long.class, suggestionClass);
+            copy.setAccessible(true);
+            copy.invoke(helper, nativeMessage, destinationChatId, 0L, 0L, null);
+            return true;
         }
 
         private static boolean isTextOrWebPagePreview(Object nativeMessage, RuntimeProfile mapping) {
