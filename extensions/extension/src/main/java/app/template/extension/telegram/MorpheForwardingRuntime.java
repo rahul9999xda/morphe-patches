@@ -346,12 +346,12 @@ public final class MorpheForwardingRuntime {
                         if (nativeMessage == null) throw new IllegalStateException("Original Telegram message is unavailable");
                         ClassLoader loader = nativeMessage.getClass().getClassLoader();
                         Class<?> helperClass = Class.forName(mapping.sendHelperClass, false, loader);
-                        if (mapping.currentR8 && isWebPagePreview(nativeMessage, mapping)) {
-                            // A webpage-preview message must retain its original TL_webPage
-                            // object as well as its message entities. Telegram's c0(MessageObject,
-                            // dialogId, scheduleDate, savedPeerId, SuggestionParams) path builds
-                            // a fresh outgoing message and carries both across. It is not a
-                            // forwardMessages/q0 operation and does not preserve sender metadata.
+                        if (mapping.currentR8 && (isWebPagePreview(nativeMessage, mapping)
+                                || hasNativeEntities(nativeMessage, mapping))) {
+                            // Webpage previews and messages with native formatting/link entities
+                            // must use Telegram's MessageObject composer. The CharSequence-only
+                            // a0 path can lose TL_messageEntityTextUrl targets. c0 builds a fresh
+                            // outgoing message; it is not forwardMessages/q0 and does not retain sender metadata.
                             Object helper = helperClass.getMethod(mapping.sendHelperInstance, int.class)
                                     .invoke(null, accountId);
                             if (!tryNativeWebPageCopy(helperClass, helper, nativeMessage,
@@ -466,20 +466,47 @@ public final class MorpheForwardingRuntime {
             } catch (Throwable ignored) { return false; }
         }
 
+        /** Returns true when the source TL_message carries formatting or link entities. */
+        private static boolean hasNativeEntities(Object nativeMessage, RuntimeProfile mapping) {
+            try {
+                Field ownerField = findField(nativeMessage.getClass(), mapping.messageOwnerField);
+                if (ownerField == null) return false;
+                ownerField.setAccessible(true);
+                Object owner = ownerField.get(nativeMessage);
+                if (owner == null) return false;
+                Field entitiesField = findField(owner.getClass(), "entities");
+                if (entitiesField == null) return false;
+                entitiesField.setAccessible(true);
+                Object entities = entitiesField.get(owner);
+                return entities instanceof List && !((List<?>) entities).isEmpty();
+            } catch (Throwable ignored) { return false; }
+        }
+
         /**
-         * Uses Telegram's own MessageObject-to-new-message composer for webpage previews.
-         * DEX-confirmed descriptors:
-         * Android: rz.c0(mj, long, long, long, rj)
-         * Web:     rz.c0(hj, long, long, long, mj)
-         * The first long is the destination dialog. The other two are zero for an
-         * immediate ordinary send (no scheduled date and no saved-peer override).
+         * Uses Telegram's native MessageObject-to-new-message composer. Resolve c0 by its
+         * structural DEX signature instead of RuntimeProfile.suggestionParamsClass: that
+         * profile field does not match the final c0 parameter in the Android 13.2.2 APK.
+         * The method takes (MessageObject, long, long, long, Suggestions); the first long
+         * is destination dialogId and the remaining two are zero for an immediate send.
          */
         private static boolean tryNativeWebPageCopy(Class<?> helperClass, Object helper,
                                                      Object nativeMessage, long destinationChatId,
                                                      RuntimeProfile mapping, ClassLoader loader) throws Exception {
-            Class<?> suggestionClass = Class.forName(mapping.suggestionParamsClass, false, loader);
-            Method copy = helperClass.getMethod("c0", nativeMessage.getClass(),
-                    long.class, long.class, long.class, suggestionClass);
+            Method copy = null;
+            for (Method candidate : helperClass.getDeclaredMethods()) {
+                Class<?>[] p = candidate.getParameterTypes();
+                if (!"c0".equals(candidate.getName()) || p.length != 5
+                        || p[0] != nativeMessage.getClass()
+                        || p[1] != long.class || p[2] != long.class || p[3] != long.class
+                        || p[4].isPrimitive()) {
+                    continue;
+                }
+                if (copy != null) {
+                    throw new IllegalStateException("Ambiguous native MessageObject COPY composer");
+                }
+                copy = candidate;
+            }
+            if (copy == null) return false;
             copy.setAccessible(true);
             copy.invoke(helper, nativeMessage, destinationChatId, 0L, 0L, null);
             return true;
