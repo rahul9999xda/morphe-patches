@@ -168,7 +168,10 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         val messageClassifier = if (current1331) currentR8Methods.single()
             else currentR8Methods.first { it.name == "l4" || it.name == "A6" }
         val plusClassifier = messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")
-        val callbackFieldName = if (current1331) "n0" else "o1"
+        // n0 is the animation/transition completion callback in 13.3.1.
+        // The one-shot close callback remains o1 in both current and legacy
+        // Android/Web builds; selecting n0 also sees a second Runnable.run().
+        val callbackFieldName = "o1"
         val callbackIndex = if (plusClassifier) {
             require(runIndexes.size == 1) {
                 "Expected one Plus close-time Runnable.run() callback, found ${runIndexes.size}"
@@ -183,7 +186,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
                     reference.name == callbackFieldName && reference.type == "Ljava/lang/Runnable;"
             }
             require(callbackFieldIndexes.size == 1) {
-                "Expected one SecretMediaViewer.o1 callback read, found ${callbackFieldIndexes.size}"
+                "Expected one SecretMediaViewer.o1 close-callback read, found ${callbackFieldIndexes.size}"
             }
             val callbackFieldIndex = callbackFieldIndexes.single()
             val callbackReceiverRegister =
