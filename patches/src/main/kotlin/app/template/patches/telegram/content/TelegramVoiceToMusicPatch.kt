@@ -6,6 +6,8 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.MessageObjectIsMusicFingerprint
+import app.template.patches.telegram.Telegram1331DocumentIsMusicNormalFingerprint
+import app.template.patches.telegram.Telegram1331DocumentIsMusicWebFingerprint
 import app.template.patches.telegram.TelegramR8DocumentIsMusicNormalFingerprint
 import app.template.patches.telegram.TelegramR8DocumentIsMusicWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8DocumentIsMusicFingerprint
@@ -32,7 +34,9 @@ val telegramVoiceToMusicPatch = bytecodePatch(
 
     execute {
         val currentDocumentClassifier =
-            TelegramR8DocumentIsMusicNormalFingerprint.methodOrNull
+            Telegram1331DocumentIsMusicNormalFingerprint.methodOrNull
+                ?: Telegram1331DocumentIsMusicWebFingerprint.methodOrNull
+                ?: TelegramR8DocumentIsMusicNormalFingerprint.methodOrNull
                 ?: TelegramR8DocumentIsMusicWebFingerprint.methodOrNull
                 ?: TelegramPlus13221R8DocumentIsMusicFingerprint.methodOrNull
                 ?: TelegramPlusR8DocumentIsMusicFingerprint.methodOrNull

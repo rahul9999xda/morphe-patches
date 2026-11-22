@@ -6,6 +6,7 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.Telegram1331FileLoadOperationUpdateParamsFingerprint
 import app.template.patches.telegram.FileLoadOperationUpdateParamsFingerprint
 import app.template.patches.telegram.TelegramR8FileLoadOperationUpdateParamsNormalFingerprint
 import app.template.patches.telegram.TelegramR8FileLoadOperationUpdateParamsWebFingerprint
@@ -23,7 +24,8 @@ val telegramDownloadBoostPatch = bytecodePatch(
 
     execute {
         val currentR8Method =
-            TelegramR8FileLoadOperationUpdateParamsNormalFingerprint.methodOrNull
+            Telegram1331FileLoadOperationUpdateParamsFingerprint.methodOrNull
+                ?: TelegramR8FileLoadOperationUpdateParamsNormalFingerprint.methodOrNull
                 ?: TelegramR8FileLoadOperationUpdateParamsWebFingerprint.methodOrNull
         val plusR8Method = TelegramPlus13221R8FileLoadOperationUpdateParamsFingerprint.methodOrNull
             ?: PlusR8FileLoadOperationUpdateParamsFingerprint.methodOrNull

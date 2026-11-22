@@ -17,6 +17,9 @@ import app.template.patches.telegram.NotificationsControllerRemoveDeletedMessage
 import app.template.patches.telegram.NotificationsControllerRemoveDeletedMessagesPlusLegacyFingerprint
 import app.template.patches.telegram.MessagesControllerDeletePushMessagesPlusFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.Telegram1331WebMarkMessagesAsDeletedFingerprint
+import app.template.patches.telegram.Telegram1331ProcessUpdateArrayNormalFingerprint
+import app.template.patches.telegram.Telegram1331ProcessUpdateArrayWebFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayNormalFingerprint
 import app.template.patches.telegram.TelegramR8ProcessUpdateArrayWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8ProcessUpdateArrayFingerprint
@@ -105,6 +108,8 @@ val telegramAntiDeletePatch = bytecodePatch(
 
     execute {
         val currentR8UpdateMethods = listOf(
+            Telegram1331ProcessUpdateArrayNormalFingerprint,
+            Telegram1331ProcessUpdateArrayWebFingerprint,
             TelegramR8ProcessUpdateArrayNormalFingerprint,
             TelegramR8ProcessUpdateArrayWebFingerprint,
             TelegramPlus13221R8ProcessUpdateArrayFingerprint,
@@ -134,11 +139,13 @@ val telegramAntiDeletePatch = bytecodePatch(
             // Restore the independently proven Web 13.2.2 private-chat storage guard
             // from telegram-web-antidelete-repair.zip. Keep this separate from push
             // notification handling: do not replace or bypass the update-array logic.
-            if (currentR8UpdateMethod.definingClass == "Lorg/telegram/messenger/sp;") {
+            if (currentR8UpdateMethod.definingClass == "Lorg/telegram/messenger/sp;" ||
+                currentR8UpdateMethod.definingClass == "Lorg/telegram/messenger/pp;") {
                 val storageDeleteMethod = requireNotNull(
-                    TelegramWebR8MarkMessagesAsDeletedFingerprint.methodOrNull
+                    Telegram1331WebMarkMessagesAsDeletedFingerprint.methodOrNull
+                        ?: TelegramWebR8MarkMessagesAsDeletedFingerprint.methodOrNull
                 ) {
-                    "Failed to match Telegram Web 13.2.2 MessagesStorage.ds.P0"
+                    "Failed to match Telegram Web MessagesStorage P0"
                 }
                 storageDeleteMethod.addInstructions(
                     0,
@@ -190,7 +197,8 @@ val telegramAntiDeletePatch = bytecodePatch(
             // lookup is the exact map/key pair used to obtain the ArrayList receiver.
             // Telegram/Web use La0/h (f/l, m/n); Plus uses Lu/k (f/l, n/q).
             val expectedMapClass = when (currentR8UpdateMethod.definingClass) {
-                "Lorg/telegram/messenger/wp;", "Lorg/telegram/messenger/sp;" -> "La0/h;"
+                "Lorg/telegram/messenger/wp;", "Lorg/telegram/messenger/sp;",
+                "Lorg/telegram/messenger/tp;", "Lorg/telegram/messenger/pp;" -> "La0/h;"
                 "Lorg/telegram/messenger/ko0;", "Lorg/telegram/messenger/mo0;" -> "Lu/k;"
                 else -> error("Unrecognized current R8 delete dispatcher ${currentR8UpdateMethod.definingClass}")
             }
@@ -244,6 +252,12 @@ val telegramAntiDeletePatch = bytecodePatch(
                 )
                 "Lorg/telegram/messenger/sp;" -> Triple(
                     "Lorg/telegram/messenger/kt;", "M", listOf("La0/h;", "Z"),
+                )
+                "Lorg/telegram/messenger/tp;" -> Triple(
+                    "Lorg/telegram/messenger/jt;", "M", listOf("La0/h;", "Z"),
+                )
+                "Lorg/telegram/messenger/pp;" -> Triple(
+                    "Lorg/telegram/messenger/ft;", "M", listOf("La0/h;", "Z"),
                 )
                 "Lorg/telegram/messenger/ko0;" -> Triple(
                     "Lorg/telegram/messenger/f31;", "p1", listOf("Lu/k;", "Z"),

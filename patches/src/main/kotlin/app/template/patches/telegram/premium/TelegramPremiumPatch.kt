@@ -12,6 +12,10 @@ import app.template.patches.telegram.SharedConfigGetDevicePerformanceClassFinger
 import app.template.patches.telegram.UserConfigGetMaxAccountCountFingerprint
 import app.template.patches.telegram.UserConfigHasPremiumOnAccountsFingerprint
 import app.template.patches.telegram.UserConfigIsPremiumFingerprint
+import app.template.patches.telegram.Telegram1331PremiumUserNormalFingerprint
+import app.template.patches.telegram.Telegram1331PremiumUserWebFingerprint
+import app.template.patches.telegram.Telegram1331UserConfigPremiumNormalFingerprint
+import app.template.patches.telegram.Telegram1331UserConfigPremiumWebFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsPremiumUserNormalFingerprint
 import app.template.patches.telegram.TelegramR8UserConfigIsPremiumFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsPremiumUserWebFingerprint
@@ -50,7 +54,9 @@ val telegramPremiumPatch = bytecodePatch(
         // non-null method across targets: doing so used to leave Plus without a
         // controller entitlement hook.
         val premiumUserMethod = requireNotNull(
-            TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
+            Telegram1331PremiumUserNormalFingerprint.methodOrNull
+                ?: Telegram1331PremiumUserWebFingerprint.methodOrNull
+                ?: TelegramR8MessagesControllerIsPremiumUserNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsPremiumUserWebFingerprint.methodOrNull
                 ?: TelegramPlus13221R8MessagesControllerIsPremiumUserFingerprint.methodOrNull
                 ?: TelegramPlusR8MessagesControllerIsPremiumUserFingerprint.methodOrNull
@@ -66,7 +72,9 @@ val telegramPremiumPatch = bytecodePatch(
         // state. Plus 13.2.2.1 uses lm1.H()Z; the older Plus jm1.H()Z fingerprint remains independent. The old
         // named UserConfig fingerprint remains a legacy-only fallback.
         val userConfigPremium = requireNotNull(
-            TelegramR8UserConfigIsPremiumFingerprint.methodOrNull
+            Telegram1331UserConfigPremiumNormalFingerprint.methodOrNull
+                ?: Telegram1331UserConfigPremiumWebFingerprint.methodOrNull
+                ?: TelegramR8UserConfigIsPremiumFingerprint.methodOrNull
                 ?: TelegramPlus13221R8UserConfigIsPremiumFingerprint.methodOrNull
                 ?: TelegramPlusR8UserConfigIsPremiumFingerprint.methodOrNull
                 ?: UserConfigIsPremiumFingerprint.methodOrNull,

@@ -10,6 +10,12 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.Telegram1331IsChatNoForwardsNormalFingerprint
+import app.template.patches.telegram.Telegram1331IsChatNoForwardsWebFingerprint
+import app.template.patches.telegram.Telegram1331IsUserFullNoForwardsNormalFingerprint
+import app.template.patches.telegram.Telegram1331IsUserFullNoForwardsWebFingerprint
+import app.template.patches.telegram.Telegram1331IsPeerNoForwardsNormalFingerprint
+import app.template.patches.telegram.Telegram1331IsPeerNoForwardsWebFingerprint
 import app.template.patches.telegram.TelegramR8IsChatNoForwardsNormalFingerprint
 import app.template.patches.telegram.TelegramR8IsChatNoForwardsWebFingerprint
 import app.template.patches.telegram.TelegramR8IsUserNoForwardsUserFullNormalFingerprint
@@ -92,6 +98,12 @@ val telegramBypassContentRestrictionsPatch = bytecodePatch(
 
     execute {
         val currentR8Methods = listOf(
+            Telegram1331IsChatNoForwardsNormalFingerprint,
+            Telegram1331IsChatNoForwardsWebFingerprint,
+            Telegram1331IsUserFullNoForwardsNormalFingerprint,
+            Telegram1331IsUserFullNoForwardsWebFingerprint,
+            Telegram1331IsPeerNoForwardsNormalFingerprint,
+            Telegram1331IsPeerNoForwardsWebFingerprint,
             TelegramR8IsChatNoForwardsNormalFingerprint,
             TelegramR8IsChatNoForwardsWebFingerprint,
             TelegramR8IsUserNoForwardsUserFullNormalFingerprint,

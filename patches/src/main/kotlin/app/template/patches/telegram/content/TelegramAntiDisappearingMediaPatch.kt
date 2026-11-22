@@ -6,11 +6,16 @@ import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
+import app.template.patches.telegram.Telegram1331MessageObjectIsSecretMediaNormalFingerprint
+import app.template.patches.telegram.Telegram1331MessageObjectIsSecretMediaWebFingerprint
+import app.template.patches.telegram.Telegram1331SecretMediaViewerCloseFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticWebFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaInstanceNormalFingerprint
@@ -99,6 +104,8 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
 
     execute {
         val currentR8Methods = listOf(
+            Telegram1331MessageObjectIsSecretMediaNormalFingerprint,
+            Telegram1331MessageObjectIsSecretMediaWebFingerprint,
             TelegramR8MessageObjectIsSecretMediaStaticNormalFingerprint,
             TelegramR8MessageObjectIsSecretMediaStaticWebFingerprint,
             TelegramR8MessageObjectIsSecretMediaInstanceNormalFingerprint,
@@ -123,8 +130,11 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             needDrawBluredPreviewFingerprint,
         ).mapNotNull { it.methodOrNull }
 
+        val current1331 = currentR8Methods.size == 1 &&
+            currentR8Methods.single().name == "m5" &&
+            currentR8Methods.single().definingClass in setOf("Lorg/telegram/messenger/jj;", "Lorg/telegram/messenger/fj;")
         require(
-            (currentR8Methods.size == 3 && legacyMethods.isEmpty()) ||
+            current1331 || (currentR8Methods.size == 3 && legacyMethods.isEmpty()) ||
                 (currentR8Methods.isEmpty() && legacyMethods.size == 7)
         ) {
             "Could not uniquely resolve current R8 or complete legacy secret-media classifiers: " +
@@ -136,6 +146,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         if (currentR8Methods.isEmpty()) return@execute
 
         val closeMethods = listOf(
+            Telegram1331SecretMediaViewerCloseFingerprint,
             TelegramR8SecretMediaViewerCloseFingerprint,
             TelegramPlus13221R8SecretMediaViewerCloseFingerprint,
             TelegramPlusR8SecretMediaViewerCloseFingerprint,
@@ -153,8 +164,11 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
                 reference.name == "run" && reference.parameterTypes.isEmpty() && reference.returnType == "V"
         }
 
-        val messageClassifier = currentR8Methods.first { it.name == "l4" || it.name == "A6" }
-        val callbackIndex = if (messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")) {
+        val messageClassifier = if (current1331) currentR8Methods.single()
+            else currentR8Methods.first { it.name == "l4" || it.name == "A6" }
+        val plusClassifier = messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")
+        val callbackFieldName = if (current1331) "n0" else "o1"
+        val callbackIndex = if (plusClassifier) {
             require(runIndexes.size == 1) {
                 "Expected one Plus close-time Runnable.run() callback, found ${runIndexes.size}"
             }
@@ -165,21 +179,31 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
                 val registers = instructions[index] as? TwoRegisterInstruction
                 instructions[index].opcode == Opcode.IGET_OBJECT && registers?.registerA == 1 &&
                     reference?.definingClass == "Lorg/telegram/ui/SecretMediaViewer;" &&
-                    reference.name == "o1" && reference.type == "Ljava/lang/Runnable;"
+                    reference.name == callbackFieldName && reference.type == "Ljava/lang/Runnable;"
             }
             require(callbackFieldIndexes.size == 1) {
                 "Expected one SecretMediaViewer.o1 callback read, found ${callbackFieldIndexes.size}"
             }
             val callbackFieldIndex = callbackFieldIndexes.single()
-            val closeCallbackRuns = runIndexes.filter { it > callbackFieldIndex }
+            val callbackReceiverRegister =
+                (instructions[callbackFieldIndex] as TwoRegisterInstruction).registerA
+            val closeCallbackRuns = runIndexes.filter { index ->
+                val instruction = instructions[index]
+                val receiver = when (instruction) {
+                    is FiveRegisterInstruction -> instruction.registerC.takeIf { instruction.registerCount > 0 }
+                    is RegisterRangeInstruction -> instruction.startRegister.takeIf { instruction.registerCount > 0 }
+                    else -> null
+                }
+                index > callbackFieldIndex && receiver == callbackReceiverRegister
+            }
             require(closeCallbackRuns.size == 1) {
-                "Expected exactly one close callback Runnable.run() after SecretMediaViewer.o1, found ${closeCallbackRuns.size}"
+                "Expected exactly one close callback Runnable.run() using the active callback register, found ${closeCallbackRuns.size}"
             }
             closeCallbackRuns.single()
         }
         require(callbackIndex in runIndexes) { "Resolved callback index is not a Runnable.run() call" }
 
-        val replacement = if (messageClassifier.definingClass in setOf("Lorg/telegram/messenger/x20;", "Lorg/telegram/messenger/z20;")) {
+        val replacement = if (plusClassifier) {
             // Plus synthetic close animation receives the active MessageObject as p2.
             """
                 if-eqz p1, :morphe_skip_expiry_callback
@@ -193,10 +217,11 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             """.trimIndent()
         } else {
             val messageClass = messageClassifier.definingClass
+            val classifierName = messageClassifier.name
             """
                 iget-object v2, v0, Lorg/telegram/ui/SecretMediaViewer;->g0:${messageClass}
                 if-eqz v2, :morphe_run_expiry_callback
-                invoke-virtual {v2}, ${messageClass}->l4()Z
+                invoke-virtual {v2}, ${messageClass}->${classifierName}()Z
                 move-result v2
                 if-nez v2, :morphe_skip_expiry_callback
                 :morphe_run_expiry_callback
@@ -205,7 +230,7 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
             """.trimIndent()
         }
         // Secret-media callback is skipped, but the surrounding close method
-        // still clears o1 and completes the viewer lifecycle normally.
+        // still clears the callback field and completes the viewer lifecycle normally.
         closeMethod.replaceInstruction(callbackIndex, replacement)
     }
 }

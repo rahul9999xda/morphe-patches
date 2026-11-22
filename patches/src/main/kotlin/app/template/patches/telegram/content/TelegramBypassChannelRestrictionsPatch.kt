@@ -21,6 +21,10 @@ import app.template.patches.telegram.ShowCantOpenAlertNormalFingerprint
 import app.template.patches.telegram.ShowCantOpenAlertPlusFingerprint
 import app.template.patches.telegram.CheckCanOpenChat4Web1303Fingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.Telegram1331GetRestrictionReasonNormalFingerprint
+import app.template.patches.telegram.Telegram1331GetRestrictionReasonWebFingerprint
+import app.template.patches.telegram.Telegram1331ShowSensitiveContentNormalFingerprint
+import app.template.patches.telegram.Telegram1331ShowSensitiveContentWebFingerprint
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonNormalFingerprint
 import app.template.patches.telegram.TelegramR8GetRestrictionReasonWebFingerprint
 import app.template.patches.telegram.TelegramR8IsSensitiveNormalFingerprint
@@ -273,19 +277,38 @@ val telegramBypassChannelRestrictionsPatch = bytecodePatch(
         // Resolve a single complete current-R8 variant. Do not mix fingerprints
         // from Android, Web and Plus: the obfuscated owners are different even
         // where method names happen to be the same.
-        val normalGetRestrictionReason = TelegramR8GetRestrictionReasonNormalFingerprint.methodOrNull
-        val webGetRestrictionReason = TelegramR8GetRestrictionReasonWebFingerprint.methodOrNull
+        val current1331Android = Telegram1331GetRestrictionReasonNormalFingerprint.methodOrNull
+        val current1331Web = Telegram1331GetRestrictionReasonWebFingerprint.methodOrNull
+        val normalGetRestrictionReason = current1331Android
+            ?: TelegramR8GetRestrictionReasonNormalFingerprint.methodOrNull
+        val webGetRestrictionReason = current1331Web
+            ?: TelegramR8GetRestrictionReasonWebFingerprint.methodOrNull
         val plusGetRestrictionReason = TelegramPlus13221R8GetRestrictionReasonFingerprint.methodOrNull
             ?: TelegramPlusR8GetRestrictionReasonFingerprint.methodOrNull
         val matchedCurrentVariants = listOfNotNull(
-            normalGetRestrictionReason?.let { "android" },
-            webGetRestrictionReason?.let { "web" },
+            current1331Android?.let { "android1331" },
+            current1331Web?.let { "web1331" },
+            normalGetRestrictionReason?.takeIf { current1331Android == null }?.let { "android" },
+            webGetRestrictionReason?.takeIf { current1331Web == null }?.let { "web" },
             plusGetRestrictionReason?.let { "plus" },
         )
         require(matchedCurrentVariants.size <= 1) {
             "Multiple current R8 Bypass Channel Restrictions variants matched: $matchedCurrentVariants"
         }
         val currentVariant = matchedCurrentVariants.singleOrNull()
+        if (currentVariant == "android1331" || currentVariant == "web1331") {
+            // In 13.3.1 the restriction-reason parser is H1(ArrayList)String,
+            // the sensitive-content visibility gate is f5()Z. These are distinct
+            // from the old controller methods; do not patch the broad chat-opening callback.
+            requireNotNull(if (currentVariant == "android1331") current1331Android else current1331Web)
+                .addInstructions(0, "const/4 v0, 0x0\nreturn-object v0")
+            val showSensitive = if (currentVariant == "android1331")
+                Telegram1331ShowSensitiveContentNormalFingerprint.methodOrNull
+            else Telegram1331ShowSensitiveContentWebFingerprint.methodOrNull
+            requireNotNull(showSensitive) { "Missing 13.3.1 sensitive-content visibility gate" }
+                .addInstructions(0, "const/4 v0, 0x1\nreturn v0")
+            return@execute
+        }
         if (currentVariant != null) {
             val getRestrictionReason = when (currentVariant) {
                 "android" -> requireNotNull(normalGetRestrictionReason)

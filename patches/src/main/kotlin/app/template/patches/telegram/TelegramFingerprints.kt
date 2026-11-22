@@ -1698,22 +1698,23 @@ val TelegramPlusR8CertificateHashFingerprint = Fingerprint(
     parameters = emptyList(),
 )
 
-// Morphe Settings list builders and application startup hooks (Telegram 13.2.2).
-// d51/i51 are the actual row-list builders; c51/h51 are unrelated theme-view classes.
+// Morphe Settings list builders and application startup hooks (Telegram 13.3.1).
+// The main settings/profile row builders are v41.f0 (Android) and y41.f0 (Web).
+// d51/i51 are unrelated synthetic classes and do not own the row-building method.
 val TelegramR8MorpheSettingsRowsNormalFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/d51;", name = "e0", returnType = "V",
-    parameters = listOf("Lorg/telegram/ui/d51;", "Ljava/util/ArrayList;"),
+    definingClass = "Lorg/telegram/ui/v41;", name = "f0", returnType = "V",
+    parameters = listOf("Lorg/telegram/ui/v41;", "Ljava/util/ArrayList;"),
 )
 val TelegramR8MorpheSettingsRowsWebFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/i51;", name = "f0", returnType = "V",
-    parameters = listOf("Lorg/telegram/ui/i51;", "Ljava/util/ArrayList;"),
+    definingClass = "Lorg/telegram/ui/y41;", name = "f0", returnType = "V",
+    parameters = listOf("Lorg/telegram/ui/y41;", "Ljava/util/ArrayList;"),
 )
 val TelegramR8ApplicationOnCreateNormalFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/u0;", name = "onCreate", returnType = "V",
+    definingClass = "Lorg/telegram/messenger/t0;", name = "onCreate", returnType = "V",
     parameters = emptyList(),
 )
 val TelegramR8ApplicationOnCreateWebFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/t0;", name = "onCreate", returnType = "V",
+    definingClass = "Lorg/telegram/messenger/s0;", name = "onCreate", returnType = "V",
     parameters = emptyList(),
 )
 
@@ -1837,4 +1838,164 @@ val TelegramPlus13221R8CertificateHashFingerprint = Fingerprint(
 val TelegramPlus13221UpdateButtonUpdateFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/ui/Components/UpdateButton;",
     name = "update", returnType = "V", parameters = listOf("Z"),
+)
+
+// ─── Telegram / Telegram Web 13.3.1 (builds 73461 / 73469) ─────────────────────
+// Independently extracted from the supplied APK DEX files. These are current
+// target fingerprints; the pre-13.3.1 R8 and named legacy fingerprints above
+// remain separate and are not repurposed.
+
+val Telegram1331ProcessUpdateArrayNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;",
+    name = "U3",
+    returnType = "Z",
+    parameters = listOf("Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Z", "I"),
+)
+
+val Telegram1331ProcessUpdateArrayWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;",
+    name = "U3",
+    returnType = "Z",
+    parameters = listOf("Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Ljava/util/ArrayList;", "Z", "I"),
+)
+
+val Telegram1331SendScreenshotNotificationNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/nz;",
+    name = "k0",
+    returnType = "Z",
+    parameters = listOf("J", "Lorg/telegram/messenger/jj;", "Z"),
+)
+
+val Telegram1331SendScreenshotNotificationWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pz;",
+    name = "k0",
+    returnType = "Z",
+    parameters = listOf("J", "Lorg/telegram/messenger/fj;", "Z"),
+)
+
+val Telegram1331SendTypingNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;",
+    name = "O4",
+    returnType = "Z",
+    parameters = listOf("I", "I", "J", "J", "Ljava/lang/String;"),
+)
+
+val Telegram1331SendTypingWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;",
+    name = "O4",
+    returnType = "Z",
+    parameters = listOf("I", "I", "J", "J", "Ljava/lang/String;"),
+)
+
+val Telegram1331IsChatNoForwardsNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "r2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$Chat;"),
+)
+val Telegram1331IsChatNoForwardsWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "r2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$Chat;"),
+)
+val Telegram1331IsUserFullNoForwardsNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "Q2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$UserFull;"),
+)
+val Telegram1331IsUserFullNoForwardsWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "Q2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$UserFull;"),
+)
+val Telegram1331IsPeerNoForwardsNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "G2", returnType = "Z", parameters = listOf("J"),
+)
+val Telegram1331IsPeerNoForwardsWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "G2", returnType = "Z", parameters = listOf("J"),
+)
+
+val Telegram1331GetRestrictionReasonNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "H1", returnType = "Ljava/lang/String;",
+    parameters = listOf("Ljava/util/ArrayList;"),
+)
+val Telegram1331GetRestrictionReasonWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "H1", returnType = "Ljava/lang/String;",
+    parameters = listOf("Ljava/util/ArrayList;"),
+)
+val Telegram1331ShowSensitiveContentNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "f5", returnType = "Z",
+)
+val Telegram1331ShowSensitiveContentWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "f5", returnType = "Z",
+)
+val Telegram1331IsSponsoredDisabledNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "K2", returnType = "Z",
+)
+val Telegram1331IsSponsoredDisabledWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "K2", returnType = "Z",
+)
+
+val Telegram1331PremiumUserNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/tp;", name = "H2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$User;"),
+)
+val Telegram1331PremiumUserWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/pp;", name = "H2", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$User;"),
+)
+val Telegram1331UserConfigPremiumNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/y10;", name = "q", returnType = "Z",
+)
+val Telegram1331UserConfigPremiumWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/a20;", name = "q", returnType = "Z",
+)
+
+val Telegram1331DocumentIsMusicNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/jj;", name = "J3", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$Document;"),
+)
+val Telegram1331DocumentIsMusicWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/fj;", name = "J3", returnType = "Z",
+    parameters = listOf("Lorg/telegram/tgnet/TLRPC\$Document;"),
+)
+
+val Telegram1331MessageObjectIsSecretMediaNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/jj;", name = "m5", returnType = "Z",
+)
+val Telegram1331MessageObjectIsSecretMediaWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/fj;", name = "m5", returnType = "Z",
+)
+val Telegram1331SecretMediaViewerCloseFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/SecretMediaViewer;", name = "e", returnType = "Z",
+    parameters = listOf("Z", "Z"),
+)
+
+val Telegram1331WebMarkMessagesAsDeletedFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/as;",
+    name = "P0",
+    returnType = "Ljava/util/ArrayList;",
+    parameters = listOf("J", "Ljava/util/ArrayList;", "Z", "Z", "I", "I"),
+)
+
+val Telegram1331FileLoadOperationUpdateParamsFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/d7;",
+    name = "t",
+    returnType = "V",
+    parameters = emptyList(),
+)
+val Telegram1331StoriesReadReceiptNormalFingerprint = Fingerprint(
+    definingClass = "Lyg/e5;",
+    name = "Y",
+    returnType = "Z",
+    parameters = listOf(
+        "Lorg/telegram/tgnet/tl/TL_stories\$PeerStories;",
+        "Lorg/telegram/tgnet/tl/TL_stories\$StoryItem;",
+        "Z",
+    ),
+)
+val Telegram1331StoriesReadReceiptWebFingerprint = Fingerprint(
+    definingClass = "Lbh/b9;",
+    name = "Y",
+    returnType = "Z",
+    parameters = listOf(
+        "Lorg/telegram/tgnet/tl/TL_stories\$PeerStories;",
+        "Lorg/telegram/tgnet/tl/TL_stories\$StoryItem;",
+        "Z",
+    ),
 )

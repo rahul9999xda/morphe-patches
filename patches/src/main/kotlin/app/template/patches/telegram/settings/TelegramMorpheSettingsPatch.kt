@@ -27,10 +27,10 @@ private val postInitApplicationFingerprint = Fingerprint(
     returnType = "V", parameters = emptyList(),
 )
 private val telegramApplicationOnCreateFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/u0;", name = "onCreate", returnType = "V", parameters = emptyList(),
+    definingClass = "Lorg/telegram/messenger/t0;", name = "onCreate", returnType = "V", parameters = emptyList(),
 )
 private val telegramWebApplicationOnCreateFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/messenger/t0;", name = "onCreate", returnType = "V", parameters = emptyList(),
+    definingClass = "Lorg/telegram/messenger/s0;", name = "onCreate", returnType = "V", parameters = emptyList(),
 )
 
 private val morpheSettingsActivityManifestPatch = resourcePatch(
@@ -71,6 +71,7 @@ private fun settingsRowInstructions(componentClass: String, factoryMethod: Strin
     # v0 is reused by Telegram's builder and can contain a TextView at its
     # normal exit. Restore the original fragment from p0 before resolving its Activity.
     move-object/from16 v0, p0
+    move-object/from16 v1, p1
     sget-object v4, $contextField:Landroid/content/Context;
     invoke-static {v0, v4}, Lapp/template/extension/telegram/MorpheSettingsEntry;->createSettingsRow(Ljava/lang/Object;Landroid/content/Context;)Landroid/view/View;
     move-result-object v0
@@ -155,10 +156,10 @@ fun patchSettingsBuilder(
 
         when {
             currentAndroid != null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/d51;", "e0", "v41", "m", "Lorg/telegram/messenger/u0;->b", 26,
+                "Lorg/telegram/ui/v41;", "f0", "k51", "m", "Lorg/telegram/messenger/t0;->b", 24,
             )
             currentWeb != null -> patchSettingsBuilder(
-                "Lorg/telegram/ui/i51;", "f0", "n41", "m", "Lorg/telegram/messenger/t0;->b", 24,
+                "Lorg/telegram/ui/y41;", "f0", "j51", "m", "Lorg/telegram/messenger/s0;->b", 24,
             )
             currentAndroid == null && currentWeb == null && legacyAndroid != null && legacyWeb == null -> patchSettingsBuilder(
                 "Lorg/telegram/ui/p91;", "b0", "r71", "l", "Lorg/telegram/messenger/ApplicationLoader;->applicationContext", 22,
@@ -181,8 +182,8 @@ fun patchSettingsBuilder(
             }
         }
         val startupClass = when {
-            currentAndroid != null -> "Lorg/telegram/messenger/u0;"
-            currentWeb != null -> "Lorg/telegram/messenger/t0;"
+            currentAndroid != null -> "Lorg/telegram/messenger/t0;"
+            currentWeb != null -> "Lorg/telegram/messenger/s0;"
             else -> "Lorg/telegram/messenger/ApplicationLoader;"
         }
         val startupName = if (currentAndroid != null || currentWeb != null) "onCreate" else "postInitApplication"

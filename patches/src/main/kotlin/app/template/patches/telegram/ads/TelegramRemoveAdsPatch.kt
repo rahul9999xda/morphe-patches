@@ -8,6 +8,8 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsFingerprint
 import app.template.patches.telegram.PlusApplicationLoaderLoadAdsLegacyFingerprint
+import app.template.patches.telegram.Telegram1331IsSponsoredDisabledNormalFingerprint
+import app.template.patches.telegram.Telegram1331IsSponsoredDisabledWebFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8GetSponsoredMessagesFingerprint
@@ -60,7 +62,9 @@ val telegramRemoveAdsPatch = bytecodePatch(
         // Keep only independently identified controller/ad-loader hooks below.
 
         val currentControllerMethod =
-            TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
+            Telegram1331IsSponsoredDisabledNormalFingerprint.methodOrNull
+                ?: Telegram1331IsSponsoredDisabledWebFingerprint.methodOrNull
+                ?: TelegramR8MessagesControllerIsSponsoredDisabledNormalFingerprint.methodOrNull
                 ?: TelegramR8MessagesControllerIsSponsoredDisabledWebFingerprint.methodOrNull
                 ?: TelegramPlus13221R8IsSponsoredDisabledFingerprint.methodOrNull
                 ?: TelegramPlusR8IsSponsoredDisabledFingerprint.methodOrNull

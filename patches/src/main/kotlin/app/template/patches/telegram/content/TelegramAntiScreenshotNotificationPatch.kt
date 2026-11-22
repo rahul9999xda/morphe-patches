@@ -8,6 +8,8 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.SendScreenshotMessageSecretFingerprint
 import app.template.patches.telegram.SendScreenshotMessageUserFingerprint
+import app.template.patches.telegram.Telegram1331SendScreenshotNotificationNormalFingerprint
+import app.template.patches.telegram.Telegram1331SendScreenshotNotificationWebFingerprint
 import app.template.patches.telegram.TelegramR8SendScreenshotNotificationNormalFingerprint
 import app.template.patches.telegram.TelegramR8SendScreenshotNotificationWebFingerprint
 import app.template.patches.telegram.TelegramPlusSendScreenshotNotificationFingerprint
@@ -26,8 +28,10 @@ val telegramAntiScreenshotNotificationPatch = bytecodePatch(
         // Telegram/Web use boolean dispatchers; Plus 13.2.2.1 uses the void
         // rg1.H4(User, int, Message) sender. The Plus hook returns void before
         // TL_messages_sendScreenshotNotification is constructed.
-        val currentAndroid = TelegramR8SendScreenshotNotificationNormalFingerprint.methodOrNull
-        val currentWeb = TelegramR8SendScreenshotNotificationWebFingerprint.methodOrNull
+        val currentAndroid = Telegram1331SendScreenshotNotificationNormalFingerprint.methodOrNull
+            ?: TelegramR8SendScreenshotNotificationNormalFingerprint.methodOrNull
+        val currentWeb = Telegram1331SendScreenshotNotificationWebFingerprint.methodOrNull
+            ?: TelegramR8SendScreenshotNotificationWebFingerprint.methodOrNull
         val plusCurrent = TelegramPlus13221R8SendScreenshotNotificationFingerprint.methodOrNull
             ?: TelegramPlusSendScreenshotNotificationFingerprint.methodOrNull
 

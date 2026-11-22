@@ -7,6 +7,8 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.StoriesReadReceiptFlowFingerprint
 import app.template.patches.telegram.StoriesReadReceiptFlowLegacyFingerprint
+import app.template.patches.telegram.Telegram1331StoriesReadReceiptNormalFingerprint
+import app.template.patches.telegram.Telegram1331StoriesReadReceiptWebFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptNormalFingerprint
 import app.template.patches.telegram.TelegramR8StoriesReadReceiptWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8StoriesReadReceiptFingerprint
@@ -35,6 +37,8 @@ val telegramHideStoriesReadPatch = bytecodePatch(
         // StoryItem, boolean)Z and O1(long)V. Both construct
         // TL_stories_readStories, so both must be stopped on Plus.
         val currentR8Methods = listOfNotNull(
+            Telegram1331StoriesReadReceiptNormalFingerprint.methodOrNull,
+            Telegram1331StoriesReadReceiptWebFingerprint.methodOrNull,
             TelegramR8StoriesReadReceiptNormalFingerprint.methodOrNull,
             TelegramR8StoriesReadReceiptWebFingerprint.methodOrNull,
             TelegramPlus13221R8StoriesReadReceiptFingerprint.methodOrNull

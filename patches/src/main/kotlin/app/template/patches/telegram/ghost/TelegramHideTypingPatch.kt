@@ -7,6 +7,8 @@ import app.template.patches.shared.Constants.TELEGRAM_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.signature.telegramSpoofDependency
+import app.template.patches.telegram.Telegram1331SendTypingNormalFingerprint
+import app.template.patches.telegram.Telegram1331SendTypingWebFingerprint
 import app.template.patches.telegram.TelegramR8SendTypingNormalFingerprint
 import app.template.patches.telegram.TelegramR8SendTypingWebFingerprint
 import app.template.patches.telegram.TelegramPlusR8SendTypingFingerprint
@@ -46,7 +48,9 @@ val telegramHideTypingPatch = bytecodePatch(
 
     execute {
         val currentR8Method =
-            TelegramR8SendTypingNormalFingerprint.methodOrNull
+            Telegram1331SendTypingNormalFingerprint.methodOrNull
+                ?: Telegram1331SendTypingWebFingerprint.methodOrNull
+                ?: TelegramR8SendTypingNormalFingerprint.methodOrNull
                 ?: TelegramR8SendTypingWebFingerprint.methodOrNull
                 ?: TelegramPlus13221R8SendTypingFingerprint.methodOrNull
                 ?: TelegramPlusR8SendTypingFingerprint.methodOrNull

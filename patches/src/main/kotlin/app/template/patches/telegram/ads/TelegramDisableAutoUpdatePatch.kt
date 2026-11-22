@@ -19,6 +19,9 @@ import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalNormalFinge
 import app.template.patches.telegram.TelegramR8CheckPromoInfoInternalWebFingerprint
 import app.template.patches.telegram.signature.telegramSpoofDependency
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 
 private val sharedConfigIsAppUpdateAvailableFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/SharedConfig;",
@@ -40,14 +43,13 @@ private val messagesControllerCheckPromoInfoInternalFingerprint = Fingerprint(
     parameters = listOf("Z"),
 )
 
-// Telegram 13.2.2 uses different SharedConfig owners in the two APK variants:
-// Android stores the update in org.telegram.messenger.uz.j1; Web stores it in
-// org.telegram.messenger.tz.j1. The exact static-field write is the hook, not a
-// guessed method name. Keep the older named SharedConfig predicate below for legacy.
+// Telegram 13.3.1 uses different update-cache owners in the two APK variants:
+// Android stores the update in pz.j1; Web stores it in rz.j1. These fields and
+// their SPUT_OBJECT writes are present in the supplied DEX files.
 private val telegramR8UpdateObjectStoreAndroidFingerprint = Fingerprint(
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/messenger/uz;",
+            definingClass = "Lorg/telegram/messenger/pz;",
             name = "j1",
             type = "Lorg/telegram/tgnet/TLRPC\$TL_help_appUpdate;",
             opcode = Opcode.SPUT_OBJECT,
@@ -58,7 +60,7 @@ private val telegramR8UpdateObjectStoreAndroidFingerprint = Fingerprint(
 private val telegramR8UpdateObjectStoreWebFingerprint = Fingerprint(
     filters = listOf(
         fieldAccess(
-            definingClass = "Lorg/telegram/messenger/tz;",
+            definingClass = "Lorg/telegram/messenger/rz;",
             name = "j1",
             type = "Lorg/telegram/tgnet/TLRPC\$TL_help_appUpdate;",
             opcode = Opcode.SPUT_OBJECT,
@@ -91,9 +93,9 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
             """)
         } else {
             // Current Android and Web APKs both inline the update-availability gate.
-            // Their actual update-object owners differ (uz.j1 vs tz.j1). Replace only
-            // exact SPUT_OBJECT writes to those fields; leave all unrelated initialization
-            // and update-response parsing intact. The legacy named predicate remains above.
+            // Their update-object owners differ (pz.j1 vs rz.j1). Replace only
+            // exact SPUT_OBJECT writes to those fields with a null store. This clears
+            // any previously cached update instead of leaving stale update state behind. The legacy named predicate remains above.
             val updateStores = (
                 telegramR8UpdateObjectStoreAndroidFingerprint.matchAllOrNull().orEmpty() +
                     telegramR8UpdateObjectStoreWebFingerprint.matchAllOrNull().orEmpty()
@@ -101,7 +103,20 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
             if (updateStores.isNotEmpty()) {
                 updateStores.forEach { match ->
                     match.instructionMatches.map { it.index }.distinct().sortedDescending().forEach { index ->
-                        match.method.replaceInstruction(index, "nop")
+                        val instruction = requireNotNull(match.method.implementation?.instructions?.elementAtOrNull(index)) {
+                            "Update-cache write instruction $index disappeared before mutation"
+                        }
+                        val register = (instruction as? OneRegisterInstruction)?.registerA
+                            ?: error("Update-cache SPUT_OBJECT at $index has no single source register")
+                        val field = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+                            ?: error("Update-cache SPUT_OBJECT at $index has no field reference")
+                        require(field.type == "Lorg/telegram/tgnet/TLRPC\$TL_help_appUpdate;") {
+                            "Unexpected update-cache field type ${field.type}"
+                        }
+                        match.method.replaceInstruction(
+                            index,
+                            "const/4 v$register, 0x0\nsput-object v$register, ${field.definingClass}->${field.name}:${field.type}",
+                        )
                     }
                 }
             } else {
@@ -112,7 +127,7 @@ val telegramDisableAutoUpdatePatch = bytecodePatch(
                         TelegramPlus13221UpdateButtonUpdateFingerprint.methodOrNull != null ||
                         PlusUpdateButtonUpdateFingerprint.methodOrNull != null
                 ) {
-                    "Missing current uz.j1/tz.j1 update-store hooks and legacy/Plus update UI hooks"
+                    "Missing current pz.j1/rz.j1 update-store hooks and legacy/Plus update UI hooks"
                 }
             }
         }
