@@ -720,8 +720,11 @@ public final class MorpheSettingsActivity extends Activity {
                     boolean broadcast = readBooleanField(chat, "broadcast");
                     boolean megagroup = readBooleanField(chat, "megagroup");
                     boolean gigagroup = readBooleanField(chat, "gigagroup");
-                    boolean channel = channelId != 0 || "channel".equals(peerKind)
-                            || broadcast || megagroup || gigagroup;
+                    // Telegram marks supergroups with megagroup/gigagroup flags too.
+                    // Those flags do not make them broadcast channels: keep them
+                    // on the group icon. Only a channel peer or broadcast chat
+                    // receives the megaphone icon.
+                    boolean channel = channelId != 0 || "channel".equals(peerKind) || broadcast;
                     icon = channel ? "📢" : "👥";
                     if (displayName.isEmpty() && chat != null) {
                         displayName = readStringField(chat, "username");

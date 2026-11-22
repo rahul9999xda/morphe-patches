@@ -716,17 +716,18 @@ public final class MorpheForwardingRuntime {
 
         static RuntimeProfile forId(int id) {
             // 13.3.1 exact targets verified from Telegram 73461 and Web 73469 DEX:
-            // Application context: t0.b / s0.b; NotificationCenter: vs / ss;
-            // delegate: qs / ns; MessageObject: jj / fj; selected account is
+            // Application context: t0.b / s0.b; NotificationCenter: ss in both APKs;
+            // delegate: ns in both APKs; new-message event: ss.l0 (0x31 / 49);
+            // MessageObject: jj / fj; selected account is
             // UserConfig y10.t0 / a20.t0. Native send helper is nz / pz.
             if (id == PROFILE_TELEGRAM_ANDROID_1331) return new RuntimeProfile(true,
-                    "org.telegram.messenger.t0", "b", "org.telegram.messenger.vs",
-                    "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.t0", "b", "org.telegram.messenger.ss",
+                    "org.telegram.messenger.ns", "f", "b", 0x31, 4, "k", "v", "w",
                     "", "", "org.telegram.messenger.nz", "C", "q0", "org.telegram.messenger.oj", "",
                     "org.telegram.messenger.a", "a", "a0", null);
             if (id == PROFILE_TELEGRAM_WEB_1331) return new RuntimeProfile(true,
                     "org.telegram.messenger.s0", "b", "org.telegram.messenger.ss",
-                    "org.telegram.messenger.ns", "f", "b", 1, 4, "k", "v", "w",
+                    "org.telegram.messenger.ns", "f", "b", 0x31, 4, "k", "v", "w",
                     "", "", "org.telegram.messenger.pz", "C", "q0", "org.telegram.messenger.kj", "",
                     "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
