@@ -578,29 +578,52 @@ public final class MorpheSettingsActivity extends Activity {
         final int account;
         try {
             int selectedAccount;
+            // Telegram 13.3.1 moved the selected-account slot into the current
+            // UserConfig R8 classes. The previous d20.t0 lookup belongs to 13.2.x.
             try {
-                // Telegram Android/Web 13.2.2: verified selected account slot.
-                Class<?> config = Class.forName("org.telegram.messenger.d20", false, cl);
+                Class<?> config = Class.forName("org.telegram.messenger.y10", false, cl);
                 Field selected = findField(config, "t0");
-                if (selected == null) throw new NoSuchFieldException("d20.t0");
+                if (selected == null) throw new NoSuchFieldException("y10.t0");
                 selected.setAccessible(true);
                 selectedAccount = selected.getInt(null);
-            } catch (Throwable notAndroidWeb) {
-                // Plus 13.2.1.0: jm1.y0 is the persisted selectedAccount value.
-                Class<?> config = Class.forName("org.telegram.messenger.jm1", false, cl);
-                Field selected = findField(config, "y0");
-                if (selected == null) throw new NoSuchFieldException("jm1.y0");
-                selected.setAccessible(true);
-                selectedAccount = selected.getInt(null);
+            } catch (Throwable notAndroid1331) {
+                try {
+                    Class<?> config = Class.forName("org.telegram.messenger.a20", false, cl);
+                    Field selected = findField(config, "t0");
+                    if (selected == null) throw new NoSuchFieldException("a20.t0");
+                    selected.setAccessible(true);
+                    selectedAccount = selected.getInt(null);
+                } catch (Throwable notWeb1331) {
+                    try {
+                        // Telegram Android/Web 13.2.2 legacy profile.
+                        Class<?> config = Class.forName("org.telegram.messenger.d20", false, cl);
+                        Field selected = findField(config, "t0");
+                        if (selected == null) throw new NoSuchFieldException("d20.t0");
+                        selected.setAccessible(true);
+                        selectedAccount = selected.getInt(null);
+                    } catch (Throwable notAndroidWeb) {
+                        // Plus 13.2.1.0: jm1.y0 is the persisted selectedAccount value.
+                        Class<?> config = Class.forName("org.telegram.messenger.jm1", false, cl);
+                        Field selected = findField(config, "y0");
+                        if (selected == null) throw new NoSuchFieldException("jm1.y0");
+                        selected.setAccessible(true);
+                        selectedAccount = selected.getInt(null);
+                    }
+                }
             }
             account = selectedAccount;
+            if (account < 0 || account >= 4) {
+                throw new IllegalStateException("Selected Telegram account slot is out of range: " + account);
+            }
         } catch (Throwable unavailable) {
             throw new IllegalStateException("Could not resolve the active Telegram account", unavailable);
         }
 
         String[] controllerNames = {
-                "org.telegram.messenger.wp", // Android 13.2.2 build 73031
-                "org.telegram.messenger.sp", // Web 13.2.2 build 73039
+                "org.telegram.messenger.tp", // Telegram Android 13.3.1 build 73461
+                "org.telegram.messenger.pp", // Telegram Web 13.3.1 build 73469
+                "org.telegram.messenger.wp", // Telegram Android 13.2.2 build 73031
+                "org.telegram.messenger.sp", // Telegram Web 13.2.2 build 73039
                 "org.telegram.messenger.ko0", // Plus Messenger 13.2.1.0 build 22678
                 "org.telegram.messenger.MessagesController" // named legacy fallback
         };
@@ -611,7 +634,8 @@ public final class MorpheSettingsActivity extends Activity {
             try {
                 Class<?> candidate = Class.forName(name, false, cl);
                 String getterName = name.endsWith("MessagesController") ? "getInstance"
-                        : (name.endsWith("ko0") ? "ud" : "s1");
+                        : (name.endsWith("tp") || name.endsWith("pp") ? "u1"
+                        : (name.endsWith("ko0") ? "ud" : "s1"));
                 java.lang.reflect.Method getter = findMethod(candidate, getterName, int.class);
                 if (getter == null) throw new NoSuchMethodException(name + "." + getterName + "(int)");
                 getter.setAccessible(true);
@@ -637,10 +661,13 @@ public final class MorpheSettingsActivity extends Activity {
         peerField.setAccessible(true);
         boolean legacyController = controllerClass.getName().endsWith("MessagesController");
         boolean plusController = controllerClass.getName().endsWith("ko0");
+        boolean current1331 = controllerClass.getName().endsWith(".tp")
+                || controllerClass.getName().endsWith(".pp");
         java.lang.reflect.Method getUser = findMethod(controllerClass,
-                legacyController ? "getUser" : (plusController ? "ze" : "a2"), Long.class);
+                legacyController ? "getUser" : (plusController ? "ze" : (current1331 ? "c2" : "a2")), Long.class);
         java.lang.reflect.Method getChat = findMethod(controllerClass,
-                legacyController ? "getChat" : (plusController ? "tc" : "M0"), Long.class);
+                legacyController ? "getChat" : (plusController ? "tc" : (current1331 ? "x1" : "M0")),
+                current1331 ? long.class : Long.class);
         if (getUser == null || getChat == null) {
             throw new IllegalStateException("Telegram user/chat lookup methods could not be resolved");
         }

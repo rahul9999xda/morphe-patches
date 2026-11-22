@@ -27,14 +27,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Connects Morphe forwarding rules to Telegram's already-authenticated account stack.
- * Current Telegram 13.2.2 Android/Web R8 names are selected by the patch's startup hook.
+ * Current Telegram 13.3.1 Android/Web R8 names are selected by the patch's startup hook;
+ * older profiles remain available for already-supported builds.
  * The no-argument entry point is retained for older, unobfuscated targets.
  */
 public final class MorpheForwardingRuntime {
     private static final int PROFILE_UNSET = -2;
     private static final int PROFILE_LEGACY = -1;
-    private static final int PROFILE_TELEGRAM_ANDROID_1322 = 0;
-    private static final int PROFILE_TELEGRAM_WEB_1322 = 1;
+    private static final int PROFILE_TELEGRAM_ANDROID_1331 = 0;
+    private static final int PROFILE_TELEGRAM_WEB_1331 = 1;
 
     private static final ArrayList<Object> OBSERVERS = new ArrayList<>();
     private static final Set<Integer> REGISTERED_ACCOUNTS = new HashSet<>();
@@ -58,9 +59,9 @@ public final class MorpheForwardingRuntime {
         installInternal(PROFILE_LEGACY);
     }
 
-    /** Called by the 13.2.2 Telegram Android/Web patch with its exact R8 profile. */
+    /** Called by the 13.3.1 Telegram Android/Web patch with its exact R8 profile. */
     public static synchronized void install(int profile) {
-        if (profile != PROFILE_TELEGRAM_ANDROID_1322 && profile != PROFILE_TELEGRAM_WEB_1322) {
+        if (profile != PROFILE_TELEGRAM_ANDROID_1331 && profile != PROFILE_TELEGRAM_WEB_1331) {
             installInternal(PROFILE_LEGACY);
             return;
         }
@@ -175,6 +176,12 @@ public final class MorpheForwardingRuntime {
 
     private static boolean isSecretDialog(long dialogId, RuntimeProfile mapping, ClassLoader loader) {
         try {
+            // Telegram 13.3.1's fork-specific R8 pass no longer exposes the old
+            // DialogObject helper under i5/h5. Secret dialog IDs are encoded in
+            // the upper 32 bits; normal user/group/channel dialog IDs are not.
+            if (mapping.dialogIdClass == null || mapping.dialogIdClass.isEmpty()) {
+                return (dialogId >> 32) != 0;
+            }
             Class<?> type = Class.forName(mapping.dialogIdClass, false, loader);
             Method method = type.getMethod(mapping.dialogIdMethod, long.class);
             return Boolean.TRUE.equals(method.invoke(null, dialogId));
@@ -373,7 +380,7 @@ public final class MorpheForwardingRuntime {
                                 throw new NoSuchMethodException("Telegram native text composer is not static: " + mapping.copyMethod);
                             }
                             textCopy.setAccessible(true);
-                            // Verified from Telegram 13.2.2 DEX: a0(AccountInstance,
+                            // Verified from Telegram 13.3.1 DEX: a0(AccountInstance,
                             // CharSequence, long dialogId, long topicId, boolean notify,
                             // int scheduleDate, int scheduleRepeatPeriod). The destination
                             // dialogId must be the FIRST long argument; ordinary chats use
@@ -423,7 +430,7 @@ public final class MorpheForwardingRuntime {
                         boolean firstFlag = dropAuthor;
                         boolean secondFlag = mapping.currentR8 ? dropMedia : false;
                         method.invoke(helper, messages, destinationChatId,
-                                firstFlag, secondFlag, false, 0, 0, null, -1, 0L, 0L, null);
+                                firstFlag, secondFlag, false, 0, 0, nativeMessage, -1, 0L, 0L, null);
                         // q0 returns a local message identifier (Int), not a Boolean
                         // success flag. Do not reject zero/negative IDs: Telegram's send
                         // queue may legitimately use them. A thrown exception is the
@@ -485,7 +492,7 @@ public final class MorpheForwardingRuntime {
         /**
          * Uses Telegram's native MessageObject-to-new-message composer. Resolve c0 by its
          * structural DEX signature instead of RuntimeProfile.suggestionParamsClass: that
-         * profile field does not match the final c0 parameter in the Android 13.2.2 APK.
+         * profile field does not match the final c0 parameter in the Telegram 13.3.1 APK.
          * The method takes (MessageObject, long, long, long, Suggestions); the first long
          * is destination dialogId and the remaining two are zero for an immediate send.
          */
@@ -524,7 +531,7 @@ public final class MorpheForwardingRuntime {
                 mediaField.setAccessible(true);
                 Object media = mediaField.get(owner);
                 if (media == null) return true;
-                // Telegram's 13.2.2 generated type is TL_messageMediaWebPage. Keep
+                // Telegram's 13.3.1 generated type is TL_messageMediaWebPage. Keep
                 // this explicit because R8 renames SendMessagesHelper/MessageObject but
                 // leaves the generated TLRPC media type and its webpage field intact.
                 for (Class<?> type = media.getClass(); type != null && type != Object.class;
@@ -617,14 +624,16 @@ public final class MorpheForwardingRuntime {
                                                    RuntimeProfile mapping) throws NoSuchMethodException, ClassNotFoundException {
             ClassLoader loader = helperClass.getClassLoader();
             Class<?> forwardOptionsClass = Class.forName(mapping.forwardOptionsClass, false, loader);
-            Class<?> suggestionClass = Class.forName(mapping.suggestionParamsClass, false, loader);
-            // 13.2.2 Android uses SendMessagesHelper.q0(..., mj, ..., rj); Web
-            // uses q0(..., hj, ..., mj). The intermediate parameter is a topic/reply
-            // descriptor, not MessageObject. Matching MessageObject here made reflection
-            // fail before Telegram could enqueue any channel post.
+            // Telegram 13.3.1 q0 has the verified 12-parameter R8 signature:
+            // ArrayList, dialogId, 3 flags, 2 ints, MessageObject, int, 2 longs,
+            // then the fork-specific topic/reply descriptor (oj / kj).
+            // Do not retain the obsolete 13.2.2 two-descriptor overload assumption.
+            Class<?> messageClass = Class.forName(mapping.currentR8
+                    ? (mapping.applicationClass.endsWith(".t0") ? "org.telegram.messenger.jj" : "org.telegram.messenger.fj")
+                    : "org.telegram.messenger.MessageObject", false, loader);
             Method method = helperClass.getMethod(mapping.forwardMethod, ArrayList.class, long.class,
                     boolean.class, boolean.class, boolean.class, int.class, int.class,
-                    forwardOptionsClass, int.class, long.class, long.class, suggestionClass);
+                    messageClass, int.class, long.class, long.class, forwardOptionsClass);
             method.setAccessible(true);
             return method;
         }
@@ -704,15 +713,19 @@ public final class MorpheForwardingRuntime {
         }
 
         static RuntimeProfile forId(int id) {
-            if (id == PROFILE_TELEGRAM_ANDROID_1322) return new RuntimeProfile(true,
-                    "org.telegram.messenger.u0", "b", "org.telegram.messenger.zs",
-                    "org.telegram.messenger.us", "f", "b", 1, 4, "k", "v", "w",
-                    "org.telegram.messenger.i5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.mj", "org.telegram.messenger.rj",
-                    "org.telegram.messenger.a", "a", "a0", null);
-            if (id == PROFILE_TELEGRAM_WEB_1322) return new RuntimeProfile(true,
+            // 13.3.1 exact targets verified from Telegram 73461 and Web 73469 DEX:
+            // Application context: t0.b / s0.b; NotificationCenter: vs / ss;
+            // delegate: qs / ns; MessageObject: jj / fj; selected account is
+            // UserConfig y10.t0 / a20.t0. Native send helper is nz / pz.
+            if (id == PROFILE_TELEGRAM_ANDROID_1331) return new RuntimeProfile(true,
                     "org.telegram.messenger.t0", "b", "org.telegram.messenger.vs",
                     "org.telegram.messenger.qs", "f", "b", 1, 4, "k", "v", "w",
-                    "org.telegram.messenger.h5", "D", "org.telegram.messenger.rz", "C", "q0", "org.telegram.messenger.hj", "org.telegram.messenger.mj",
+                    "", "", "org.telegram.messenger.nz", "C", "q0", "org.telegram.messenger.oj", "",
+                    "org.telegram.messenger.a", "a", "a0", null);
+            if (id == PROFILE_TELEGRAM_WEB_1331) return new RuntimeProfile(true,
+                    "org.telegram.messenger.s0", "b", "org.telegram.messenger.ss",
+                    "org.telegram.messenger.ns", "f", "b", 1, 4, "k", "v", "w",
+                    "", "", "org.telegram.messenger.pz", "C", "q0", "org.telegram.messenger.kj", "",
                     "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
                     "org.telegram.messenger.ApplicationLoader", "applicationContext",
