@@ -180,7 +180,11 @@ public final class MorpheForwardingRuntime {
             // DialogObject helper under i5/h5. Secret dialog IDs are encoded in
             // the upper 32 bits; normal user/group/channel dialog IDs are not.
             if (mapping.dialogIdClass == null || mapping.dialogIdClass.isEmpty()) {
-                return (dialogId >> 32) != 0;
+                // Telegram encodes encrypted-chat dialog IDs with a positive, non-zero
+                // high 32-bit component. Ordinary group/channel dialog IDs are negative
+                // (sign-extended), so testing only the high bits incorrectly classifies
+                // every group and channel as a secret chat and silently drops automation.
+                return dialogId > 0L && (dialogId >> 32) != 0L;
             }
             Class<?> type = Class.forName(mapping.dialogIdClass, false, loader);
             Method method = type.getMethod(mapping.dialogIdMethod, long.class);
@@ -221,12 +225,13 @@ public final class MorpheForwardingRuntime {
                     }
                     return null;
                 }
-                // Telegram 13.3.1 posts didReceivedNewMessages as event ID 1 with
-                // [dialogId, ArrayList<MessageObject>, broadcastFlag, updateType].
-                // Do not use ss.l0 (49): that is a different notification emitted for
-                // GramTransfer messages. Index 2 is a broadcast flag and index 3 is an
-                // Integer update type; neither is a scheduled-message Boolean.
+                // NotificationCenter.didReceivedNewMessages (event 1) carries
+                // [dialogId, ArrayList<MessageObject>, isBroadcast, scheduled, ...].
+                // Index 2 is the broadcast flag, NOT the scheduled flag. Filtering it
+                // suppressed channel/broadcast updates and silently stopped automation
+                // for those sources. Only skip scheduled messages at index 3.
                 // Accept a single MessageObject as well for alternate update paths.
+                if (payload.length > 3 && Boolean.TRUE.equals(payload[3])) return null;
                 long dialogId = ((Number) payload[0]).longValue();
                 List<?> messages;
                 if (payload[1] instanceof List) {
@@ -716,7 +721,7 @@ public final class MorpheForwardingRuntime {
         static RuntimeProfile forId(int id) {
             // 13.3.1 exact targets verified from Telegram 73461 and Web 73469 DEX:
             // Application context: t0.b / s0.b; NotificationCenter: ss in both APKs;
-            // delegate: ns in both APKs; new-message event: ID 1, posted by MessagesController.y5 with [dialogId, messages, broadcastFlag, updateType]; ss.l0 (49) is a separate event;
+            // delegate: ns in both APKs; didReceivedNewMessages event ID: 1; ss.l0 (49) is unrelated.
             // MessageObject: jj / fj; selected account is
             // UserConfig y10.t0 / a20.t0. Native send helper is nz / pz.
             if (id == PROFILE_TELEGRAM_ANDROID_1331) return new RuntimeProfile(true,
