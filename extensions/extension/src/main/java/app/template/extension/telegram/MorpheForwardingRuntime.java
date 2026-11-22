@@ -221,13 +221,12 @@ public final class MorpheForwardingRuntime {
                     }
                     return null;
                 }
-                // NotificationCenter.didReceivedNewMessages (event 1) carries
-                // [dialogId, ArrayList<MessageObject>, isBroadcast, scheduled, ...].
-                // Index 2 is the broadcast flag, NOT the scheduled flag. Filtering it
-                // suppressed channel/broadcast updates and silently stopped automation
-                // for those sources. Only skip scheduled messages at index 3.
+                // Telegram 13.3.1 posts didReceivedNewMessages as event ID 1 with
+                // [dialogId, ArrayList<MessageObject>, broadcastFlag, updateType].
+                // Do not use ss.l0 (49): that is a different notification emitted for
+                // GramTransfer messages. Index 2 is a broadcast flag and index 3 is an
+                // Integer update type; neither is a scheduled-message Boolean.
                 // Accept a single MessageObject as well for alternate update paths.
-                if (payload.length > 3 && Boolean.TRUE.equals(payload[3])) return null;
                 long dialogId = ((Number) payload[0]).longValue();
                 List<?> messages;
                 if (payload[1] instanceof List) {
@@ -717,17 +716,17 @@ public final class MorpheForwardingRuntime {
         static RuntimeProfile forId(int id) {
             // 13.3.1 exact targets verified from Telegram 73461 and Web 73469 DEX:
             // Application context: t0.b / s0.b; NotificationCenter: ss in both APKs;
-            // delegate: ns in both APKs; new-message event: ss.l0 (0x31 / 49);
+            // delegate: ns in both APKs; new-message event: ID 1, posted by MessagesController.y5 with [dialogId, messages, broadcastFlag, updateType]; ss.l0 (49) is a separate event;
             // MessageObject: jj / fj; selected account is
             // UserConfig y10.t0 / a20.t0. Native send helper is nz / pz.
             if (id == PROFILE_TELEGRAM_ANDROID_1331) return new RuntimeProfile(true,
                     "org.telegram.messenger.t0", "b", "org.telegram.messenger.ss",
-                    "org.telegram.messenger.ns", "f", "b", 0x31, 4, "k", "v", "w",
+                    "org.telegram.messenger.ns", "f", "b", 1, 4, "k", "v", "w",
                     "", "", "org.telegram.messenger.nz", "C", "q0", "org.telegram.messenger.oj", "",
                     "org.telegram.messenger.a", "a", "a0", null);
             if (id == PROFILE_TELEGRAM_WEB_1331) return new RuntimeProfile(true,
                     "org.telegram.messenger.s0", "b", "org.telegram.messenger.ss",
-                    "org.telegram.messenger.ns", "f", "b", 0x31, 4, "k", "v", "w",
+                    "org.telegram.messenger.ns", "f", "b", 1, 4, "k", "v", "w",
                     "", "", "org.telegram.messenger.pz", "C", "q0", "org.telegram.messenger.kj", "",
                     "org.telegram.messenger.a", "a", "a0", null);
             return new RuntimeProfile(false,
