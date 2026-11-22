@@ -15,7 +15,6 @@ import app.template.patches.shared.Constants.TELEGRAM_PLUS_COMPATIBILITY
 import app.template.patches.shared.Constants.TELEGRAM_WEB_COMPATIBILITY
 import app.template.patches.telegram.Telegram1331MessageObjectIsSecretMediaNormalFingerprint
 import app.template.patches.telegram.Telegram1331MessageObjectIsSecretMediaWebFingerprint
-import app.template.patches.telegram.Telegram1331SecretMediaViewerCloseFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticNormalFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaStaticWebFingerprint
 import app.template.patches.telegram.TelegramR8MessageObjectIsSecretMediaInstanceNormalFingerprint
@@ -146,7 +145,9 @@ val telegramAntiDisappearingMediaPatch = bytecodePatch(
         if (currentR8Methods.isEmpty()) return@execute
 
         val closeMethods = listOf(
-            Telegram1331SecretMediaViewerCloseFingerprint,
+            // Telegram 13.3.1 uses the same R8 e(ZZ)Z signature as the
+            // existing current-R8 fingerprint. Do not register a second,
+            // identical fingerprint for the same method.
             TelegramR8SecretMediaViewerCloseFingerprint,
             TelegramPlus13221R8SecretMediaViewerCloseFingerprint,
             TelegramPlusR8SecretMediaViewerCloseFingerprint,

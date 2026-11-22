@@ -1961,11 +1961,6 @@ val Telegram1331MessageObjectIsSecretMediaNormalFingerprint = Fingerprint(
 val Telegram1331MessageObjectIsSecretMediaWebFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/fj;", name = "m5", returnType = "Z",
 )
-val Telegram1331SecretMediaViewerCloseFingerprint = Fingerprint(
-    definingClass = "Lorg/telegram/ui/SecretMediaViewer;", name = "e", returnType = "Z",
-    parameters = listOf("Z", "Z"),
-)
-
 val Telegram1331WebMarkMessagesAsDeletedFingerprint = Fingerprint(
     definingClass = "Lorg/telegram/messenger/as;",
     name = "P0",
