@@ -68,6 +68,7 @@ public final class ForwardingCoordinator {
                         reportFailure(null, "Rule store returned no rule list", null);
                         return;
                     }
+                    boolean matchedAnyRule = false;
                     for (ForwardingRule rule : rules) {
                         if (!running) return;
                         if (rule == null) continue;
@@ -78,6 +79,8 @@ public final class ForwardingCoordinator {
                             continue;
                         }
                         if (!matches) continue;
+                        matchedAnyRule = true;
+                        setRuntimeStatus("Incoming message matched rule: " + rule.getName());
                         if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
                             try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordAutomation(rule.getId()); }
                             catch (Throwable ignored) { /* stats must not block delivery */ }
@@ -98,6 +101,10 @@ public final class ForwardingCoordinator {
                                         destinationError);
                             }
                         }
+                    }
+                    if (!matchedAnyRule) {
+                        setRuntimeStatus("Incoming message from " + message.getSourceChatId()
+                                + " did not match an enabled rule");
                     }
                 }
             });
@@ -122,6 +129,13 @@ public final class ForwardingCoordinator {
                 }
             } catch (Throwable ignored) { }
             reportFailure(null, "Automation queue is full; incoming event was not queued", rejected);
+        }
+    }
+
+    private void setRuntimeStatus(String status) {
+        if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+            try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).setRuntimeStatus(status); }
+            catch (Throwable ignored) { }
         }
     }
 
@@ -165,9 +179,13 @@ public final class ForwardingCoordinator {
                         try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordCopyQueued(rule.getId()); }
                         catch (Throwable ignored) { }
                     }
-                } else if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
-                    try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordForwardQueued(rule.getId()); }
-                    catch (Throwable ignored) { }
+                    setRuntimeStatus("COPY queued for " + rule.getName() + " → " + destination);
+                } else {
+                    if (store instanceof app.template.extension.telegram.SharedPreferencesForwardingRuleStore) {
+                        try { ((app.template.extension.telegram.SharedPreferencesForwardingRuleStore) store).recordForwardQueued(rule.getId()); }
+                        catch (Throwable ignored) { }
+                    }
+                    setRuntimeStatus("FORWARD queued for " + rule.getName() + " → " + destination);
                 }
                 inFlight.remove(key);
             }

@@ -665,9 +665,13 @@ public final class MorpheSettingsActivity extends Activity {
                 || controllerClass.getName().endsWith(".pp");
         java.lang.reflect.Method getUser = findMethod(controllerClass,
                 legacyController ? "getUser" : (plusController ? "ze" : (current1331 ? "c2" : "a2")), Long.class);
+        // Telegram 13.3.1's x1(J) is NOT getChat: it resolves a linked
+        // monoforum chat and commonly returns null for ordinary groups/channels.
+        // O0(Long) is the actual MessagesController.getChat lookup in both 73461
+        // and 73469. Keep the older profile mappings isolated.
         java.lang.reflect.Method getChat = findMethod(controllerClass,
-                legacyController ? "getChat" : (plusController ? "tc" : (current1331 ? "x1" : "M0")),
-                current1331 ? long.class : Long.class);
+                legacyController ? "getChat" : (plusController ? "tc" : (current1331 ? "O0" : "M0")),
+                Long.class);
         if (getUser == null || getChat == null) {
             throw new IllegalStateException("Telegram user/chat lookup methods could not be resolved");
         }

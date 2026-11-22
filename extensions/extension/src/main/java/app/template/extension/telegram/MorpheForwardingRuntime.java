@@ -221,11 +221,13 @@ public final class MorpheForwardingRuntime {
                     }
                     return null;
                 }
-                // NotificationCenter event 1 normally carries
-                // [dialogId, ArrayList<MessageObject>, scheduled, ...]. Accept a single
-                // MessageObject as well: some Telegram update paths emit one object rather
-                // than a grouped list. Scheduled updates are deliberately not automated.
-                if (payload.length > 2 && Boolean.TRUE.equals(payload[2])) return null;
+                // NotificationCenter.didReceivedNewMessages (event 1) carries
+                // [dialogId, ArrayList<MessageObject>, isBroadcast, scheduled, ...].
+                // Index 2 is the broadcast flag, NOT the scheduled flag. Filtering it
+                // suppressed channel/broadcast updates and silently stopped automation
+                // for those sources. Only skip scheduled messages at index 3.
+                // Accept a single MessageObject as well for alternate update paths.
+                if (payload.length > 3 && Boolean.TRUE.equals(payload[3])) return null;
                 long dialogId = ((Number) payload[0]).longValue();
                 List<?> messages;
                 if (payload[1] instanceof List) {
