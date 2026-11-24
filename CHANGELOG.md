@@ -1,3 +1,8 @@
+## [1.19.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.18.0...v1.19.0-dev1) (2026-11-24)
+### ✨ New Features
+
+* **telegram:** Update patches & compatibility as per new versions 13.3.1 ([d200009](https://github.com/rahul9999xda/morphe-patches/commit/d2000093c20e6fb0cd377380512fea314fd075aa))
+
 ## [1.17.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.16.0...v1.17.0) (2026-10-28)
 ### 🐛 Bug Fixes
 

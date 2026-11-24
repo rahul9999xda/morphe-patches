@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-28T01:41:01",
-  "description": "## [1.17.0](https://github.com/rahul9999xda/morphe-patches/compare/v1.16.0...v1.17.0) (2026-10-28)\n### 🐛 Bug Fixes\n\n* **telegram:** audit patches and fingerprints for 13.1.1 ([6aa7bf7](https://github.com/rahul9999xda/morphe-patches/commit/6aa7bf713aaad012619b0e1d131c3783304cdd03))\n",
-  "download_url": "https://github.com/rahul9999xda/morphe-patches/releases/download/v1.17.0/patches-1.17.0.mpp",
+  "created_at": "2026-11-24T14:44:20",
+  "description": "## [1.19.0-dev1](https://github.com/rahul9999xda/morphe-patches/compare/v1.18.0...v1.19.0-dev1) (2026-11-24)\n### ✨ New Features\n\n* **telegram:** Update patches & compatibility as per new versions 13.3.1 ([d200009](https://github.com/rahul9999xda/morphe-patches/commit/d2000093c20e6fb0cd377380512fea314fd075aa))\n",
+  "download_url": "https://github.com/rahul9999xda/morphe-patches/releases/download/v1.19.0-dev1/patches-1.19.0-dev1.mpp",
   "signature_download_url": "",
-  "version": "1.17.0"
+  "version": "1.19.0-dev1"
 }
