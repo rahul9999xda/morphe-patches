@@ -1994,3 +1994,34 @@ val Telegram1331StoriesReadReceiptWebFingerprint = Fingerprint(
         "Z",
     ),
 )
+
+
+// Telegram Android 13.3.1 (73461) and Telegram Web 13.3.1 (73469).
+// The callback classes are independently R8-mapped in each APK. Both callbacks
+// retain the destination dialog id, original MessageObject list, and forward request.
+val Telegram1331FormattedForwardCallbackNormalFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/uy;",
+    name = "run",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/tgnet/TLObject;",
+        "Lorg/telegram/tgnet/TLRPC\$TL_error;",
+    ),
+)
+
+val Telegram1331FormattedForwardCallbackWebFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/messenger/vy;",
+    name = "run",
+    returnType = "V",
+    parameters = listOf(
+        "Lorg/telegram/tgnet/TLObject;",
+        "Lorg/telegram/tgnet/TLRPC\$TL_error;",
+    ),
+)
+
+// The RichMessage editor method is named u2() in both supplied 13.3.1 APKs.
+val Telegram1331FormattingToolsFingerprint = Fingerprint(
+    definingClass = "Lorg/telegram/ui/Components/ChatActivityEnterView;",
+    name = "u2",
+    returnType = "V",
+)
