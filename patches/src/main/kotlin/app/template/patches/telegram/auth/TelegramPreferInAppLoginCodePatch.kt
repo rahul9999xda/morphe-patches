@@ -12,7 +12,6 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
-import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 private const val CODE_SETTINGS = "Lorg/telegram/tgnet/TLRPC\$TL_codeSettings;"
 private const val ALLOW_FIREBASE = "allow_firebase"
@@ -72,49 +71,6 @@ private val TelegramWeb1331LoginCodeSettingsFingerprint = Fingerprint(
     },
 )
 
-private fun applyInAppPreference(fingerprint: Fingerprint, target: String, zeroRegister: Int) {
-    val method = fingerprint.methodOrNull
-        ?: throw PatchException("Could not locate the verified $target login CodeSettings builder.")
-    val instructions = method.implementation?.instructions?.toList()
-        ?: throw PatchException("$target login CodeSettings builder has no implementation.")
-
-    val firebaseWriteIndexes = instructions.mapIndexedNotNull { index, instruction ->
-        val field = (instruction as? ReferenceInstruction)?.reference as? FieldReference
-        index.takeIf {
-            instruction.opcode == Opcode.IPUT_BOOLEAN &&
-                field?.definingClass == CODE_SETTINGS && field.name == ALLOW_FIREBASE && field.type == "Z"
-        }
-    }
-    if (firebaseWriteIndexes.size != 2) {
-        throw PatchException("Unexpected $target allow_firebase write count: ${firebaseWriteIndexes.size}.")
-    }
-
-    val firstFirebaseWrite = firebaseWriteIndexes.first()
-    val firebaseInstruction = instructions[firstFirebaseWrite] as? TwoRegisterInstruction
-        ?: throw PatchException("Unexpected $target allow_firebase instruction format.")
-    val settingsRegister = firebaseInstruction.registerB
-
-    // Each audited build initializes a dedicated zero register immediately before
-    // constructing CodeSettings: v8 in Telegram, v9 in Telegram Web. It remains
-    // untouched up to the first allow_firebase write. Reusing it changes only that
-    // field; the hasServices() result remains available for allow_app_hash.
-    val zeroInitialized = instructions.take(firstFirebaseWrite).any { instruction ->
-        instruction.opcode == Opcode.CONST_4 &&
-            (instruction as? OneRegisterInstruction)?.registerA == zeroRegister &&
-            (instruction as? NarrowLiteralInstruction)?.narrowLiteral == 0L
-    }
-    if (!zeroInitialized) {
-        throw PatchException("The verified zero register v$zeroRegister is not initialized in $target.")
-    }
-    if (firebaseInstruction.registerA == zeroRegister) {
-        throw PatchException("Unexpected $target register alias between allow_firebase value and zero register.")
-    }
-
-    method.replaceInstruction(
-        firstFirebaseWrite,
-        "iput-boolean v$zeroRegister, v$settingsRegister, $CODE_SETTINGS->$ALLOW_FIREBASE:Z",
-    )
-}
 
 @Suppress("unused")
 val telegramPreferInAppLoginCodePatch = bytecodePatch(
@@ -130,10 +86,47 @@ val telegramPreferInAppLoginCodePatch = bytecodePatch(
         if ((android == null) == (web == null)) {
             throw PatchException("Expected exactly one Telegram 13.3.1 or Telegram Web 13.3.1 login fingerprint; found Android=${android != null}, Web=${web != null}.")
         }
-        if (android != null) {
-            applyInAppPreference(Telegram1331LoginCodeSettingsFingerprint, "Telegram 13.3.1", zeroRegister = 8)
+        val target: String
+        val zeroRegister: Int
+        val method = if (android != null) {
+            target = "Telegram 13.3.1"
+            zeroRegister = 8
+            android
         } else {
-            applyInAppPreference(TelegramWeb1331LoginCodeSettingsFingerprint, "Telegram Web 13.3.1", zeroRegister = 9)
+            target = "Telegram Web 13.3.1"
+            zeroRegister = 9
+            requireNotNull(web)
         }
+        val instructions = method.implementation?.instructions?.toList()
+            ?: throw PatchException("$target login CodeSettings builder has no implementation.")
+        val firebaseWriteIndexes = instructions.mapIndexedNotNull { index, instruction ->
+            val field = (instruction as? ReferenceInstruction)?.reference as? FieldReference
+            index.takeIf {
+                instruction.opcode == Opcode.IPUT_BOOLEAN &&
+                    field?.definingClass == CODE_SETTINGS && field.name == ALLOW_FIREBASE && field.type == "Z"
+            }
+        }
+        if (firebaseWriteIndexes.size != 2) {
+            throw PatchException("Unexpected $target allow_firebase write count: ${firebaseWriteIndexes.size}.")
+        }
+        val firstFirebaseWrite = firebaseWriteIndexes.first()
+        val firebaseInstruction = instructions[firstFirebaseWrite] as? TwoRegisterInstruction
+            ?: throw PatchException("Unexpected $target allow_firebase instruction format.")
+        val settingsRegister = firebaseInstruction.registerB
+        val zeroInitialized = instructions.take(firstFirebaseWrite).any { instruction ->
+            instruction.opcode == Opcode.CONST_4 &&
+                (instruction as? OneRegisterInstruction)?.registerA == zeroRegister &&
+                (instruction as? NarrowLiteralInstruction)?.narrowLiteral == 0
+        }
+        if (!zeroInitialized) {
+            throw PatchException("The verified zero register v$zeroRegister is not initialized in $target.")
+        }
+        if (firebaseInstruction.registerA == zeroRegister) {
+            throw PatchException("Unexpected $target register alias between allow_firebase value and zero register.")
+        }
+        method.replaceInstruction(
+            firstFirebaseWrite,
+            "iput-boolean v$zeroRegister, v$settingsRegister, $CODE_SETTINGS->$ALLOW_FIREBASE:Z",
+        )
     }
 }
